@@ -9,56 +9,37 @@
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap');
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: #080e1a; color: #e2e8f0; font-family: 'Inter', sans-serif; min-height: 100vh; }
-
   .header { padding: 24px 28px 18px; border-bottom: 1px solid #111827; }
   .header-top { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; }
   .header-label { font-size: 10px; color: #475569; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 4px; }
   .header h1 { font-size: 22px; font-weight: 300; color: #f1f5f9; }
-
   .btn { border: none; padding: 8px 16px; border-radius: 8px; font-size: 12px; cursor: pointer; font-family: inherit; }
   .btn-primary { background: #0ea5e9; color: #fff; font-weight: 600; }
   .btn-secondary { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
   .btn-ghost { background: transparent; color: #475569; border: 1px solid #1e293b; }
-
-  /* Destino tabs (top level) */
-  .destino-tabs { display: flex; gap: 4px; margin-top: 16px; border-bottom: 1px solid #1e293b; padding-bottom: 0; }
-  .destino-tab {
-    background: transparent; border: 1px solid transparent; border-bottom: 2px solid transparent;
-    color: #64748b; padding: 10px 18px; font-size: 13px; cursor: pointer; font-family: inherit;
-    font-weight: 500; border-radius: 8px 8px 0 0; transition: all 0.2s;
-  }
+  .destino-tabs { display: flex; gap: 4px; margin-top: 16px; border-bottom: 1px solid #1e293b; }
+  .destino-tab { background: transparent; border: 1px solid transparent; border-bottom: 2px solid transparent; color: #64748b; padding: 10px 18px; font-size: 13px; cursor: pointer; font-family: inherit; font-weight: 500; border-radius: 8px 8px 0 0; }
   .destino-tab.active { color: #0ea5e9; border-bottom-color: #0ea5e9; background: #0c1222; }
-
-  /* Busqueda tabs (second level) */
   .busqueda-tabs { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
-  .tab {
-    background: transparent; border: 1px solid #111827; color: #64748b;
-    padding: 8px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; font-family: inherit;
-  }
+  .tab { background: transparent; border: 1px solid #111827; color: #64748b; padding: 8px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; font-family: inherit; }
   .tab.active { background: #1e293b; border-color: #334155; color: #f1f5f9; }
   .tab-price { margin-left: 8px; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
-
   .content { padding: 24px 28px; }
-
   .stats-grid { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
   .stat-card { background: #0c1222; border: 1px solid #1e293b; border-radius: 12px; padding: 16px; flex: 1; min-width: 110px; }
   .stat-label { font-size: 10px; color: #475569; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px; }
   .stat-value { font-size: 20px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
   .stat-sub { font-size: 11px; color: #64748b; margin-top: 4px; }
-
   .badge { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; display: inline-block; }
   .badge-down { background: #064e3b; color: #34d399; border: 1px solid #065f46; }
   .badge-up { background: #7f1d1d; color: #fca5a5; border: 1px solid #991b1b; }
   .badge-stable { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
   .badge-none { background: #1e293b; color: #64748b; border: 1px solid #334155; }
-
   .objetivo-bar { border-radius: 10px; padding: 12px 18px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
   .objetivo-dentro { background: #064e3b; border: 1px solid #065f46; }
   .objetivo-fuera { background: #1e293b; border: 1px solid #334155; }
-
   .card { background: #0c1222; border: 1px solid #1e293b; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
   .section-label { font-size: 10px; color: #475569; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 14px; }
-
   .oferta-item { padding: 10px 0; border-bottom: 1px solid #111827; }
   .oferta-item:last-child { border-bottom: none; }
   .oferta-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
@@ -67,10 +48,8 @@
   .oferta-duracion { font-size: 11px; color: #f59e0b; font-family: 'JetBrains Mono', monospace; }
   .oferta-tramo { font-size: 11px; color: #64748b; margin-top: 6px; padding-left: 12px; line-height: 1.8; }
   .oferta-tramo-duracion { font-size: 10px; color: #475569; font-family: 'JetBrains Mono', monospace; margin-left: 6px; }
-
   .escala-tag { display: inline-block; background: #1e293b; color: #f59e0b; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-family: 'JetBrains Mono', monospace; margin-left: 2px; }
   .directo-tag { display: inline-block; background: #064e3b; color: #34d399; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; }
-
   .history-row { padding: 12px 0; border-bottom: 1px solid #111827; }
   .history-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
   .history-date { font-size: 12px; color: #94a3b8; font-family: 'JetBrains Mono', monospace; }
@@ -80,14 +59,11 @@
   .history-diff { font-size: 10px; margin-right: 10px; }
   .history-price { font-size: 14px; font-weight: 600; font-family: 'JetBrains Mono', monospace; }
   .history-scroll { max-height: 500px; overflow-y: auto; }
-
   .ofertas-detalle { margin-top: 10px; padding: 12px; background: #0a0f1e; border-radius: 8px; border: 1px solid #1e293b; }
-
   .price-green { color: #34d399; }
   .price-red { color: #ef4444; }
   .price-white { color: #e2e8f0; }
   .price-muted { color: #475569; }
-
   .error-bar { margin-top: 12px; padding: 10px 14px; background: #7f1d1d; border: 1px solid #991b1b; border-radius: 8px; font-size: 12px; color: #fca5a5; }
   .connect-screen { display: flex; align-items: center; justify-content: center; height: 100vh; text-align: center; }
   .connect-box { max-width: 420px; padding: 40px; }
@@ -102,7 +78,6 @@
 <body>
 <div id="app"></div>
 <script>
-const OBJETIVO = 1400;
 let apiUrl = localStorage.getItem("fm_api_url") || "";
 let data = null;
 let selectedDestino = null;
@@ -123,6 +98,11 @@ function getDestinos() {
   return destinos;
 }
 
+function getObjetivo() {
+  if (!data || !selectedBusqueda || !data[selectedBusqueda]) return 1500;
+  return data[selectedBusqueda].objetivo || 1500;
+}
+
 function render() {
   const app = document.getElementById("app");
   if (!apiUrl) { app.innerHTML = renderConnect(); setupConnectEvents(); }
@@ -141,10 +121,10 @@ function renderConnect() {
   </div></div>`;
 }
 
-function renderOfertasDetalle(ofertas) {
+function renderOfertasDetalle(ofertas, objetivo) {
   if (!ofertas || ofertas.length === 0) return '<div style="color:#334155;font-size:11px;padding:8px">Sin detalle</div>';
   return ofertas.map(o => {
-    const priceClass = o.precio <= OBJETIVO ? 'price-green' : 'price-white';
+    const priceClass = o.precio <= objetivo ? 'price-green' : 'price-white';
     const tramosHtml = o.tramos.map(t => {
       let escInfo = '';
       if (t.numEscalas === 0) escInfo = '<span class="directo-tag">DIRECTO</span>';
@@ -157,7 +137,7 @@ function renderOfertasDetalle(ofertas) {
     const durTotal = o.duracionTotal ? `<span class="oferta-duracion">${o.duracionTotal} total</span>` : '';
     return `<div class="oferta-item">
       <div class="oferta-header">
-        <div><span class="oferta-precio ${priceClass}">USD ${o.precio}</span><span class="oferta-aerolinea">${o.aerolinea}</span></div>
+        <div><span class="oferta-precio ${priceClass}">USD ${o.precio}</span> <span class="oferta-aerolinea">${o.aerolinea}</span></div>
         ${durTotal}
       </div>
       ${tramosHtml}
@@ -169,32 +149,25 @@ function renderDashboard() {
   const destinos = getDestinos();
   const destinoNames = Object.keys(destinos);
   if (destinoNames.length > 0 && !selectedDestino) selectedDestino = destinoNames[0];
-
   const busquedasEnDestino = selectedDestino ? (destinos[selectedDestino] || []) : [];
-  if (busquedasEnDestino.length > 0 && (!selectedBusqueda || !busquedasEnDestino.includes(selectedBusqueda))) {
-    selectedBusqueda = busquedasEnDestino[0];
-  }
+  if (busquedasEnDestino.length > 0 && (!selectedBusqueda || !busquedasEnDestino.includes(selectedBusqueda))) selectedBusqueda = busquedasEnDestino[0];
 
   const current = data && selectedBusqueda ? data[selectedBusqueda] : null;
   const registros = current ? current.registros || [] : [];
   const stats = current ? current.stats : null;
   const tendencia = current ? current.tendencia || "SIN DATOS" : "SIN DATOS";
+  const objetivo = getObjetivo();
   const ultimo = registros.length > 0 ? registros[registros.length - 1] : null;
   const anterior = registros.length > 1 ? registros[registros.length - 2] : null;
   const diff = ultimo && anterior ? Math.round((ultimo.precio - anterior.precio) * 100) / 100 : null;
-  const dentroObj = ultimo && ultimo.precio <= OBJETIVO;
+  const dentroObj = ultimo && ultimo.precio <= objetivo;
 
-  // Destino tabs
   let destinoTabsHtml = destinoNames.map(d => `<button class="destino-tab ${d === selectedDestino ? 'active' : ''}" data-destino="${d}">${d}</button>`).join('');
-
-  // Busqueda tabs
   let busquedaTabsHtml = busquedasEnDestino.map(name => {
     const isActive = name === selectedBusqueda;
     const r = data[name]?.registros;
     const lp = r && r.length > 0 ? r[r.length - 1].precio : null;
-    return `<button class="tab ${isActive ? 'active' : ''}" data-busqueda="${name}">
-      ${name}${lp ? `<span class="tab-price" style="color:${isActive ? '#0ea5e9' : '#334155'}">$${lp}</span>` : ''}
-    </button>`;
+    return `<button class="tab ${isActive ? 'active' : ''}" data-busqueda="${name}">${name}${lp ? `<span class="tab-price" style="color:${isActive ? '#0ea5e9' : '#334155'}">$${lp}</span>` : ''}</button>`;
   }).join("");
 
   let errorHtml = error ? `<div class="error-bar">${error}</div>` : '';
@@ -210,17 +183,16 @@ function renderDashboard() {
 
     let ultimasOfertasHtml = '';
     if (ultimo && ultimo.ofertas && ultimo.ofertas.length > 0) {
-      ultimasOfertasHtml = `<div class="card"><div class="section-label">Ofertas de la ultima busqueda (${ultimo.fecha})</div>${renderOfertasDetalle(ultimo.ofertas)}</div>`;
+      ultimasOfertasHtml = `<div class="card"><div class="section-label">Ofertas de la ultima busqueda (${ultimo.fecha})</div>${renderOfertasDetalle(ultimo.ofertas, objetivo)}</div>`;
     }
 
-    let historyHtml = '';
     const reversed = [...registros].reverse();
-    historyHtml = '<div class="history-scroll">' + reversed.map((d, i) => {
+    let historyHtml = '<div class="history-scroll">' + reversed.map((d, i) => {
       const realIndex = registros.length - 1 - i;
       const prev = realIndex > 0 ? registros[realIndex - 1]?.precio : null;
       const dd = prev ? Math.round((d.precio - prev) * 100) / 100 : null;
       const diffClass = dd !== null ? (dd < 0 ? 'price-green' : dd > 0 ? 'price-red' : 'price-muted') : '';
-      const priceClass = d.precio <= OBJETIVO ? 'price-green' : 'price-white';
+      const priceClass = d.precio <= objetivo ? 'price-green' : 'price-white';
       const isExpanded = expandedRows[`${selectedBusqueda}-${realIndex}`];
       const hasOfertas = d.ofertas && d.ofertas.length > 0;
       return `<div class="history-row">
@@ -236,7 +208,7 @@ function renderDashboard() {
             <span class="history-price ${priceClass}">$${d.precio}</span>
           </div>
         </div>
-        ${isExpanded && hasOfertas ? `<div class="ofertas-detalle">${renderOfertasDetalle(d.ofertas)}</div>` : ''}
+        ${isExpanded && hasOfertas ? `<div class="ofertas-detalle">${renderOfertasDetalle(d.ofertas, objetivo)}</div>` : ''}
       </div>`;
     }).join('') + '</div>';
 
@@ -251,8 +223,8 @@ function renderDashboard() {
         </div>
       </div>
       <div class="objetivo-bar ${dentroObj ? 'objetivo-dentro' : 'objetivo-fuera'}">
-        <span style="font-size:13px;color:${dentroObj ? '#34d399' : '#94a3b8'}">${dentroObj ? '✅ DENTRO DEL OBJETIVO' : ultimo ? 'Faltan USD ' + Math.round(ultimo.precio - OBJETIVO) + ' para el objetivo' : 'Sin datos'}</span>
-        <span style="font-size:12px;color:#64748b;font-family:monospace">Objetivo: USD ${OBJETIVO}</span>
+        <span style="font-size:13px;color:${dentroObj ? '#34d399' : '#94a3b8'}">${dentroObj ? '✅ DENTRO DEL OBJETIVO' : ultimo ? 'Faltan USD ' + Math.round(ultimo.precio - objetivo) + ' para el objetivo' : 'Sin datos'}</span>
+        <span style="font-size:12px;color:#64748b;font-family:monospace">Objetivo: USD ${objetivo}</span>
       </div>
       ${ultimasOfertasHtml}
       ${registros.length > 1 ? `<div class="card"><div class="section-label">Evolucion de precio</div><canvas id="priceChart" height="220"></canvas></div>` : ''}
@@ -280,6 +252,7 @@ function renderChart() {
   const canvas = document.getElementById("priceChart");
   if (!canvas) return;
   const registros = data[selectedBusqueda]?.registros || [];
+  const objetivo = getObjetivo();
   if (chart) chart.destroy();
   chart = new Chart(canvas.getContext("2d"), {
     type: "line",
@@ -301,12 +274,12 @@ function renderChart() {
       }
     },
     plugins: [{ id: "obj", afterDraw(c) {
-      const y = c.scales.y.getPixelForValue(OBJETIVO);
+      const y = c.scales.y.getPixelForValue(objetivo);
       const ctx = c.ctx; ctx.save(); ctx.beginPath(); ctx.setLineDash([6,3]);
       ctx.strokeStyle = "#f59e0b"; ctx.lineWidth = 1;
       ctx.moveTo(c.chartArea.left, y); ctx.lineTo(c.chartArea.right, y); ctx.stroke();
       ctx.fillStyle = "#f59e0b"; ctx.font = "10px Inter";
-      ctx.fillText("Objetivo $"+OBJETIVO, c.chartArea.right - 80, y - 6); ctx.restore();
+      ctx.fillText("Objetivo $"+objetivo, c.chartArea.right - 80, y - 6); ctx.restore();
     }}]
   });
 }
