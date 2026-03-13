@@ -11,9 +11,8 @@ from flask_cors import CORS
 
 DUFFEL_TOKEN = os.getenv("DUFFEL_TOKEN")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+TELEGRAM_CHAT_IDS = os.getenv("TELEGRAM_CHAT_IDS", "").split(",")
 
-PRECIO_MAXIMO = 1500
 INTERVALO_HORAS = 6
 DB_PATH = "vuelos.db"
 PORT = int(os.getenv("PORT", 8080))
@@ -36,14 +35,6 @@ def init_db():
             detalle_ofertas TEXT
         )
     """)
-    try:
-        c.execute("ALTER TABLE precios ADD COLUMN detalle_ofertas TEXT")
-    except:
-        pass
-    try:
-        c.execute("ALTER TABLE precios ADD COLUMN destino TEXT")
-    except:
-        pass
     conn.commit()
     conn.close()
 
@@ -119,6 +110,7 @@ def detectar_tendencia(busqueda_nombre):
 # ─── BUSQUEDAS ───
 
 BUSQUEDAS = [
+    # --- Filipinas + PNG ---
     {
         "nombre": "Filipinas ANTES del tour",
         "destino": "Filipinas + PNG",
@@ -126,6 +118,7 @@ BUSQUEDAS = [
         "destino_code": "MNL",
         "ida_fecha": "2026-07-28",
         "vuelta_fecha": "2026-08-22",
+        "precio_maximo": 1500,
     },
     {
         "nombre": "Filipinas DESPUES del tour",
@@ -134,6 +127,35 @@ BUSQUEDAS = [
         "destino_code": "MNL",
         "ida_fecha": "2026-08-10",
         "vuelta_fecha": "2026-09-03",
+        "precio_maximo": 1500,
+    },
+    # --- Londres ---
+    {
+        "nombre": "Londres fechas tempranas",
+        "destino": "Londres",
+        "origen": "EZE",
+        "destino_code": "LHR",
+        "ida_fecha": "2026-09-09",
+        "vuelta_fecha": "2026-10-01",
+        "precio_maximo": 1000,
+    },
+    {
+        "nombre": "Londres fechas centrales",
+        "destino": "Londres",
+        "origen": "EZE",
+        "destino_code": "LHR",
+        "ida_fecha": "2026-09-11",
+        "vuelta_fecha": "2026-10-03",
+        "precio_maximo": 1000,
+    },
+    {
+        "nombre": "Londres fechas tardias",
+        "destino": "Londres",
+        "origen": "EZE",
+        "destino_code": "LHR",
+        "ida_fecha": "2026-09-13",
+        "vuelta_fecha": "2026-10-05",
+        "precio_maximo": 1000,
     },
 ]
 
@@ -147,29 +169,14 @@ def generar_links(busqueda):
     ida_yymmdd = ida.replace("-", "")[2:]
     vuelta_yymmdd = vuelta.replace("-", "")[2:]
 
-    skyscanner = f"https://www.skyscanner.com.ar/transport/flights/buea/mnl/{ida_yymmdd}/{vuelta_yymmdd}/?adults=1"
+    skyscanner_destinos = {"MNL": "mnl", "LHR": "lhr"}
+    skyscanner_dest = skyscanner_destinos.get(destino, destino.lower())
+
+    skyscanner = f"https://www.skyscanner.com.ar/transport/flights/buea/{skyscanner_dest}/{ida_yymmdd}/{vuelta_yymmdd}/?adults=1"
     google = f"https://www.google.com/travel/flights?q=Flights+to+{destino}+from+{origen}+on+{ida}+through+{vuelta}&curr=USD"
     kayak = f"https://www.kayak.com/flights/{origen}-{destino}/{ida}/{vuelta}?sort=bestflight_a&fs=stops=0"
 
     return skyscanner, google, kayak
-
-
-def parse_duracion(duracion_iso):
-    if not duracion_iso:
-        return ""
-    horas = 0
-    minutos = 0
-    try:
-        d = duracion_iso.replace("PT", "")
-        if "H" in d:
-            parts = d.split("H")
-            horas = int(parts[0])
-            d = parts[1] if len(parts) > 1 else ""
-        if "M" in d:
-            minutos = int(d.replace("M", ""))
-    except:
-        return duracion_iso
-    return f"{horas}h{minutos:02d}m"
 
 
 def extraer_detalle_oferta(offer):
@@ -270,8 +277,15 @@ def buscar_vuelos(busqueda):
 
 def enviar_telegram(mensaje):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    data = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "HTML", "disable_web_page_preview": True}
-    requests.post(url, data=data)
+    for chat_id in TELEGRAM_CHAT_IDS:
+        chat_id = chat_id.strip()
+        if not chat_id:
+            continue
+        data = {"chat_id": chat_id, "text": mensaje, "parse_mode": "HTML", "disable_web_page_preview": True}
+        try:
+            requests.post(url, data=data)
+        except Exception as e:
+            print(f"  Error enviando a {chat_id}: {e}")
 
 
 def formatear_oferta_tg(offer):
@@ -313,17 +327,18 @@ def ejecutar_monitor():
     for busqueda in BUSQUEDAS:
         nombre = busqueda["nombre"]
         destino = busqueda["destino"]
+        precio_max = busqueda["precio_maximo"]
         print(f"Buscando: {nombre}...")
-        print(f"  Ida: {busqueda['ida_fecha']} / Vuelta: {busqueda['vuelta_fecha']}")
+        print(f"  Ida: {busqueda['ida_fecha']} / Vuelta: {busqueda['vuelta_fecha']} / Max: USD {precio_max}")
 
         ofertas = buscar_vuelos(busqueda)
         print(f"  Encontradas: {len(ofertas)} ofertas")
 
         baratas = sorted(
-            [o for o in ofertas if float(o["total_amount"]) <= PRECIO_MAXIMO],
+            [o for o in ofertas if float(o["total_amount"]) <= precio_max],
             key=lambda x: float(x["total_amount"]),
         )
-        print(f"  Por debajo de USD {PRECIO_MAXIMO}: {len(baratas)}")
+        print(f"  Por debajo de USD {precio_max}: {len(baratas)}")
 
         mejor_precio = None
         mejor_aerolinea = None
@@ -345,34 +360,47 @@ def ejecutar_monitor():
 
         if baratas:
             links = generar_links(busqueda)
-            alertas_por_busqueda.append((nombre, baratas, links, tendencia))
+            alertas_por_busqueda.append((nombre, destino, baratas, links, tendencia, precio_max))
         elif tendencia == "BAJANDO" and mejor_precio:
             links = generar_links(busqueda)
-            alerta_tendencia.append((nombre, mejor_precio, mejor_aerolinea, links))
+            alerta_tendencia.append((nombre, destino, mejor_precio, mejor_aerolinea, links, precio_max))
 
         print()
 
     if alertas_por_busqueda or alerta_tendencia:
-        mensaje = f"<b>✈️ ALERTA DE VUELOS</b>\n{ahora}\n\n"
+        # Agrupar por destino
+        destinos_alerta = {}
+        for nombre, destino, baratas, links, tendencia, precio_max in alertas_por_busqueda:
+            if destino not in destinos_alerta:
+                destinos_alerta[destino] = []
+            destinos_alerta[destino].append((nombre, baratas, links, tendencia, precio_max))
 
-        for nombre, baratas, links, tendencia in alertas_por_busqueda:
-            skyscanner, google, kayak = links
-            mensaje += f"<b>{nombre}</b>\n"
-            mensaje += f"Tendencia: {emoji_tendencia(tendencia)}\n"
-            for oferta in baratas[:5]:
-                mensaje += formatear_oferta_tg(oferta) + "\n"
-            mensaje += f"\n<a href='{skyscanner}'>Skyscanner</a> | <a href='{google}'>Google Flights</a> | <a href='{kayak}'>Kayak</a>\n\n"
+        for nombre, destino, precio, aerolinea, links, precio_max in alerta_tendencia:
+            if destino not in destinos_alerta:
+                destinos_alerta[destino] = []
+            destinos_alerta[destino].append(("TEND_" + nombre, precio, links, None, precio_max, aerolinea))
 
-        for nombre, precio, aerolinea, links in alerta_tendencia:
-            skyscanner, google, kayak = links
-            mensaje += f"<b>📉 TENDENCIA: {nombre}</b>\n"
-            mensaje += f"Precio bajando 3 veces seguidas!\nActual: USD {precio} ({aerolinea})\n"
-            mensaje += f"\n<a href='{skyscanner}'>Skyscanner</a> | <a href='{google}'>Google Flights</a> | <a href='{kayak}'>Kayak</a>\n\n"
+        mensaje = f"<b>✈️ FLIGHT MONITOR — {ahora}</b>\n\n"
+
+        for destino, items in destinos_alerta.items():
+            mensaje += f"<b>🌍 {destino}</b>\n{'─' * 25}\n\n"
+
+            for item in items:
+                if isinstance(item[1], list):
+                    nombre, baratas, links, tendencia, precio_max = item
+                    skyscanner, google, kayak = links
+                    mensaje += f"<b>{nombre}</b>\n"
+                    mensaje += f"Tendencia: {emoji_tendencia(tendencia)}\n"
+                    for oferta in baratas[:3]:
+                        mensaje += formatear_oferta_tg(oferta) + "\n"
+                    mensaje += f"\n<a href='{skyscanner}'>Skyscanner</a> | <a href='{google}'>Google</a> | <a href='{kayak}'>Kayak</a>\n\n"
+
+            mensaje += "\n"
 
         enviar_telegram(mensaje)
         print("ALERTA ENVIADA A TELEGRAM")
     else:
-        print(f"No se encontraron vuelos por debajo de USD {PRECIO_MAXIMO}.")
+        print("No se encontraron ofertas dentro de los rangos.")
 
     print("\n=== Fin ===")
 
@@ -407,8 +435,10 @@ def api_precios():
     datos = obtener_todos_los_precios()
 
     destino_map = {}
+    precio_map = {}
     for b in BUSQUEDAS:
         destino_map[b["nombre"]] = b.get("destino", "Sin destino")
+        precio_map[b["nombre"]] = b.get("precio_maximo", 1500)
 
     resultado = {}
     for nombre, registros in datos.items():
@@ -424,7 +454,7 @@ def api_precios():
                 "total": len(precios),
             },
             "tendencia": tendencia or "SIN DATOS",
-            "objetivo": PRECIO_MAXIMO,
+            "objetivo": precio_map.get(nombre, 1500),
             "destino": destino_map.get(nombre, "Sin destino"),
         }
 
@@ -447,6 +477,8 @@ def api_destinos():
 if __name__ == "__main__":
     print(f"Worker iniciado - ejecuta cada {INTERVALO_HORAS} horas")
     print(f"API disponible en puerto {PORT}")
+    print(f"Telegram destinos: {len(TELEGRAM_CHAT_IDS)} chat(s)")
+    print(f"Busquedas configuradas: {len(BUSQUEDAS)}")
     init_db()
 
     monitor_thread = threading.Thread(target=loop_monitor, daemon=True)
