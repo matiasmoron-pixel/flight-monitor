@@ -1,10 +1,10 @@
 import os
 import time
-import sqlite3
 import traceback
 import threading
 import json
 import requests
+import psycopg2
 from datetime import datetime
 from flask import Flask, jsonify
 from flask_cors import CORS
@@ -12,20 +12,24 @@ from flask_cors import CORS
 DUFFEL_TOKEN = os.getenv("DUFFEL_TOKEN")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_IDS = os.getenv("TELEGRAM_CHAT_IDS", "").split(",")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 INTERVALO_HORAS = 6
-DB_PATH = "vuelos.db"
 PORT = int(os.getenv("PORT", 8080))
 LAST_UPDATE_ID = 0
 
-# ─── BASE DE DATOS ───
+# ─── BASE DE DATOS (POSTGRES) ───
+
+def get_conn():
+    return psycopg2.connect(DATABASE_URL)
+
 
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_conn()
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS precios (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             busqueda TEXT,
             destino TEXT,
             fecha TEXT,
@@ -41,10 +45,10 @@ def init_db():
 
 
 def guardar_precio(busqueda_nombre, destino, mejor_precio, mejor_aerolinea, total, baratas, detalle):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_conn()
     c = conn.cursor()
     c.execute(
-        "INSERT INTO precios (busqueda, destino, fecha, mejor_precio, mejor_aerolinea, total_ofertas, ofertas_baratas, detalle_ofertas) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO precios (busqueda, destino, fecha, mejor_precio, mejor_aerolinea, total_ofertas, ofertas_baratas, detalle_ofertas) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
         (busqueda_nombre, destino, datetime.now().strftime("%Y-%m-%d %H:%M"), mejor_precio, mejor_aerolinea, total, baratas, json.dumps(detalle)),
     )
     conn.commit()
@@ -52,7 +56,7 @@ def guardar_precio(busqueda_nombre, destino, mejor_precio, mejor_aerolinea, tota
 
 
 def obtener_todos_los_precios():
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_conn()
     c = conn.cursor()
     c.execute("SELECT busqueda, destino, fecha, mejor_precio, mejor_aerolinea, total_ofertas, ofertas_baratas, detalle_ofertas FROM precios ORDER BY id")
     rows = c.fetchall()
@@ -78,9 +82,9 @@ def obtener_todos_los_precios():
 
 
 def detectar_tendencia(busqueda_nombre):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_conn()
     c = conn.cursor()
-    c.execute("SELECT mejor_precio FROM precios WHERE busqueda = ? ORDER BY id DESC LIMIT 4", (busqueda_nombre,))
+    c.execute("SELECT mejor_precio FROM precios WHERE busqueda = %s ORDER BY id DESC LIMIT 4", (busqueda_nombre,))
     precios = [row[0] for row in c.fetchall()]
     conn.close()
     if len(precios) < 4:
@@ -96,9 +100,9 @@ def detectar_tendencia(busqueda_nombre):
 
 
 def obtener_historial(busqueda_nombre):
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_conn()
     c = conn.cursor()
-    c.execute("SELECT mejor_precio FROM precios WHERE busqueda = ? ORDER BY id", (busqueda_nombre,))
+    c.execute("SELECT mejor_precio FROM precios WHERE busqueda = %s ORDER BY id", (busqueda_nombre,))
     precios = [row[0] for row in c.fetchall()]
     conn.close()
     return precios
@@ -115,134 +119,45 @@ def analizar_compra(busqueda_nombre, precio_actual, precio_maximo):
     maximo = max(precios)
     promedio = sum(precios) / len(precios)
     rango = maximo - minimo if maximo != minimo else 1
-
-    # Porcentaje de cercania al minimo (0% = es el minimo, 100% = es el maximo)
     posicion = ((precio_actual - minimo) / rango) * 100 if rango > 0 else 50
-
-    # Tendencia
     tendencia = detectar_tendencia(busqueda_nombre)
 
-    # Decision
     if precio_actual <= minimo:
-        return {
-            "accion": "COMPRA AHORA",
-            "razon": f"Precio minimo historico! Nunca estuvo tan bajo.",
-            "confianza": "ALTA",
-            "posicion": posicion,
-            "minimo": minimo,
-            "maximo": maximo,
-            "promedio": round(promedio, 2),
-        }
+        return {"accion": "COMPRA AHORA", "razon": "Precio minimo historico! Nunca estuvo tan bajo.",
+                "confianza": "ALTA", "posicion": posicion, "minimo": minimo, "maximo": maximo, "promedio": round(promedio, 2)}
     elif posicion <= 10:
-        return {
-            "accion": "COMPRA AHORA",
-            "razon": f"Muy cerca del minimo historico (${minimo}). Solo ${round(precio_actual - minimo, 2)} mas caro.",
-            "confianza": "ALTA",
-            "posicion": posicion,
-            "minimo": minimo,
-            "maximo": maximo,
-            "promedio": round(promedio, 2),
-        }
+        return {"accion": "COMPRA AHORA", "razon": f"Muy cerca del minimo historico (${minimo}). Solo ${round(precio_actual - minimo, 2)} mas caro.",
+                "confianza": "ALTA", "posicion": posicion, "minimo": minimo, "maximo": maximo, "promedio": round(promedio, 2)}
     elif posicion <= 30 and tendencia == "BAJANDO":
-        return {
-            "accion": "BUEN MOMENTO",
-            "razon": f"Precio bajo y tendencia a la baja. Podria seguir bajando pero es buen precio.",
-            "confianza": "MEDIA",
-            "posicion": posicion,
-            "minimo": minimo,
-            "maximo": maximo,
-            "promedio": round(promedio, 2),
-        }
+        return {"accion": "BUEN MOMENTO", "razon": "Precio bajo y tendencia a la baja.",
+                "confianza": "MEDIA", "posicion": posicion, "minimo": minimo, "maximo": maximo, "promedio": round(promedio, 2)}
     elif posicion <= 30:
-        return {
-            "accion": "BUEN MOMENTO",
-            "razon": f"Precio en zona baja del rango historico.",
-            "confianza": "MEDIA",
-            "posicion": posicion,
-            "minimo": minimo,
-            "maximo": maximo,
-            "promedio": round(promedio, 2),
-        }
+        return {"accion": "BUEN MOMENTO", "razon": "Precio en zona baja del rango historico.",
+                "confianza": "MEDIA", "posicion": posicion, "minimo": minimo, "maximo": maximo, "promedio": round(promedio, 2)}
     elif tendencia == "BAJANDO":
-        return {
-            "accion": "ESPERA",
-            "razon": f"Precio en zona media pero bajando. Conviene esperar.",
-            "confianza": "MEDIA",
-            "posicion": posicion,
-            "minimo": minimo,
-            "maximo": maximo,
-            "promedio": round(promedio, 2),
-        }
+        return {"accion": "ESPERA", "razon": "Precio en zona media pero bajando. Conviene esperar.",
+                "confianza": "MEDIA", "posicion": posicion, "minimo": minimo, "maximo": maximo, "promedio": round(promedio, 2)}
     elif tendencia == "SUBIENDO":
-        return {
-            "accion": "ATENTO",
-            "razon": f"Precio subiendo. Si sigue asi, puede convenir comprar pronto.",
-            "confianza": "BAJA",
-            "posicion": posicion,
-            "minimo": minimo,
-            "maximo": maximo,
-            "promedio": round(promedio, 2),
-        }
+        return {"accion": "ATENTO", "razon": "Precio subiendo. Puede convenir comprar pronto.",
+                "confianza": "BAJA", "posicion": posicion, "minimo": minimo, "maximo": maximo, "promedio": round(promedio, 2)}
     else:
-        return {
-            "accion": "ESPERA",
-            "razon": f"Precio en zona media. Monitorear.",
-            "confianza": "BAJA",
-            "posicion": posicion,
-            "minimo": minimo,
-            "maximo": maximo,
-            "promedio": round(promedio, 2),
-        }
+        return {"accion": "ESPERA", "razon": "Precio en zona media. Monitorear.",
+                "confianza": "BAJA", "posicion": posicion, "minimo": minimo, "maximo": maximo, "promedio": round(promedio, 2)}
 
 
 # ─── BUSQUEDAS ───
 
 BUSQUEDAS = [
-    {
-        "nombre": "Filipinas ANTES del tour",
-        "destino": "Filipinas + PNG",
-        "origen": "EZE",
-        "destino_code": "MNL",
-        "ida_fecha": "2026-07-28",
-        "vuelta_fecha": "2026-08-22",
-        "precio_maximo": 1500,
-    },
-    {
-        "nombre": "Filipinas DESPUES del tour",
-        "destino": "Filipinas + PNG",
-        "origen": "EZE",
-        "destino_code": "MNL",
-        "ida_fecha": "2026-08-10",
-        "vuelta_fecha": "2026-09-03",
-        "precio_maximo": 1500,
-    },
-    {
-        "nombre": "Londres fechas tempranas",
-        "destino": "Londres",
-        "origen": "EZE",
-        "destino_code": "LHR",
-        "ida_fecha": "2026-09-09",
-        "vuelta_fecha": "2026-10-01",
-        "precio_maximo": 1000,
-    },
-    {
-        "nombre": "Londres fechas centrales",
-        "destino": "Londres",
-        "origen": "EZE",
-        "destino_code": "LHR",
-        "ida_fecha": "2026-09-11",
-        "vuelta_fecha": "2026-10-03",
-        "precio_maximo": 1000,
-    },
-    {
-        "nombre": "Londres fechas tardias",
-        "destino": "Londres",
-        "origen": "EZE",
-        "destino_code": "LHR",
-        "ida_fecha": "2026-09-13",
-        "vuelta_fecha": "2026-10-05",
-        "precio_maximo": 1000,
-    },
+    {"nombre": "Filipinas ANTES del tour", "destino": "Filipinas + PNG", "origen": "EZE", "destino_code": "MNL",
+     "ida_fecha": "2026-07-28", "vuelta_fecha": "2026-08-22", "precio_maximo": 1500},
+    {"nombre": "Filipinas DESPUES del tour", "destino": "Filipinas + PNG", "origen": "EZE", "destino_code": "MNL",
+     "ida_fecha": "2026-08-10", "vuelta_fecha": "2026-09-03", "precio_maximo": 1500},
+    {"nombre": "Londres fechas tempranas", "destino": "Londres", "origen": "EZE", "destino_code": "LHR",
+     "ida_fecha": "2026-09-09", "vuelta_fecha": "2026-10-01", "precio_maximo": 1000},
+    {"nombre": "Londres fechas centrales", "destino": "Londres", "origen": "EZE", "destino_code": "LHR",
+     "ida_fecha": "2026-09-11", "vuelta_fecha": "2026-10-03", "precio_maximo": 1000},
+    {"nombre": "Londres fechas tardias", "destino": "Londres", "origen": "EZE", "destino_code": "LHR",
+     "ida_fecha": "2026-09-13", "vuelta_fecha": "2026-10-05", "precio_maximo": 1000},
 ]
 
 
@@ -294,22 +209,17 @@ def extraer_detalle_oferta(offer):
             escalas.append(seg["destination"]["iata_code"])
         duracion_total_min += duracion_tramo_min
         duracion_texto = f"{duracion_tramo_min // 60}h{duracion_tramo_min % 60:02d}m" if duracion_tramo_min > 0 else ""
-        tramos.append({
-            "origen": origen, "destino": destino_final, "escalas": escalas,
-            "numEscalas": n_stops, "duracion": duracion_texto,
-            "duracionMin": duracion_tramo_min, "aerolineasTramo": list(aerolineas_tramo),
-        })
+        tramos.append({"origen": origen, "destino": destino_final, "escalas": escalas,
+                       "numEscalas": n_stops, "duracion": duracion_texto, "duracionMin": duracion_tramo_min,
+                       "aerolineasTramo": list(aerolineas_tramo)})
     duracion_total_texto = f"{duracion_total_min // 60}h{duracion_total_min % 60:02d}m" if duracion_total_min > 0 else ""
     return {"precio": precio, "aerolinea": aerolinea, "tramos": tramos,
             "duracionTotal": duracion_total_texto, "duracionTotalMin": duracion_total_min}
 
 
 def buscar_vuelos(busqueda):
-    headers = {
-        "Accept-Encoding": "gzip", "Accept": "application/json",
-        "Content-Type": "application/json", "Duffel-Version": "v2",
-        "Authorization": f"Bearer {DUFFEL_TOKEN}",
-    }
+    headers = {"Accept-Encoding": "gzip", "Accept": "application/json", "Content-Type": "application/json",
+               "Duffel-Version": "v2", "Authorization": f"Bearer {DUFFEL_TOKEN}"}
     payload = {"data": {"slices": [
         {"origin": busqueda["origen"], "destination": busqueda["destino_code"], "departure_date": busqueda["ida_fecha"]},
         {"origin": busqueda["destino_code"], "destination": busqueda["origen"], "departure_date": busqueda["vuelta_fecha"]},
@@ -402,13 +312,12 @@ def formatear_oferta_tg(offer):
 def procesar_comando(chat_id, texto):
     texto = texto.strip().lower()
 
-    if texto == "/start" or texto == "/help" or texto == "hola":
-        msg = "Flight Monitor Bot\n"
-        msg += "=" * 25 + "\n\n"
-        msg += "Comandos disponibles:\n\n"
-        msg += "/precios - Ver mejores precios actuales\n"
-        msg += "/buscar - Buscar precios AHORA (tarda ~30s)\n"
-        msg += "/consejo - Recomendacion: comprar o esperar?\n"
+    if texto in ["/start", "/help", "hola"]:
+        msg = "Flight Monitor Bot\n" + "=" * 25 + "\n\n"
+        msg += "Comandos:\n\n"
+        msg += "/precios - Mejores precios actuales\n"
+        msg += "/buscar - Buscar precios AHORA (~30s)\n"
+        msg += "/consejo - Comprar o esperar?\n"
         msg += "/status - Estado del sistema\n"
         enviar_telegram_a(chat_id, msg)
 
@@ -416,12 +325,9 @@ def procesar_comando(chat_id, texto):
         init_db()
         datos = obtener_todos_los_precios()
         if not datos:
-            enviar_telegram_a(chat_id, "Sin datos todavia. Espera a la proxima busqueda automatica.")
+            enviar_telegram_a(chat_id, "Sin datos todavia. Espera a la proxima busqueda.")
             return
-
-        msg = "MEJORES PRECIOS ACTUALES\n"
-        msg += "=" * 30 + "\n\n"
-
+        msg = "MEJORES PRECIOS ACTUALES\n" + "=" * 30 + "\n\n"
         destinos_vistos = {}
         for nombre, registros in datos.items():
             if not registros:
@@ -432,75 +338,55 @@ def procesar_comando(chat_id, texto):
             if destino not in destinos_vistos:
                 destinos_vistos[destino] = []
             destinos_vistos[destino].append((nombre, ultimo))
-
         for destino, items in destinos_vistos.items():
             msg += f"{destino}\n" + "-" * 20 + "\n"
             mejor = min(items, key=lambda x: x[1]["precio"])
             for nombre, ultimo in items:
-                precio = ultimo["precio"]
-                aerolinea = ultimo["aerolinea"]
-                fecha = ultimo["fecha"]
                 marcador = " << MEJOR" if (nombre, ultimo) == mejor else ""
-                msg += f"  {nombre}: USD {precio} ({aerolinea}){marcador}\n"
+                msg += f"  {nombre}: USD {ultimo['precio']} ({ultimo['aerolinea']}){marcador}\n"
             msg += f"  Ultima busqueda: {mejor[1]['fecha']}\n\n"
-
         enviar_telegram_a(chat_id, msg)
 
     elif texto == "/buscar":
-        enviar_telegram_a(chat_id, "Buscando precios ahora... (puede tardar 30-60 segundos)")
+        enviar_telegram_a(chat_id, "Buscando precios... (30-60 segundos)")
         try:
             ejecutar_monitor()
             enviar_telegram_a(chat_id, "Busqueda completada! Usa /precios para ver resultados.")
         except Exception as e:
-            enviar_telegram_a(chat_id, f"Error en busqueda: {e}")
+            enviar_telegram_a(chat_id, f"Error: {e}")
 
     elif texto == "/consejo":
         init_db()
         datos = obtener_todos_los_precios()
         if not datos:
-            enviar_telegram_a(chat_id, "Sin datos suficientes todavia. Necesito al menos 2 busquedas.")
+            enviar_telegram_a(chat_id, "Sin datos suficientes. Necesito al menos 2 busquedas.")
             return
-
-        msg = "CONSEJO DE COMPRA\n"
-        msg += "=" * 30 + "\n\n"
-
+        msg = "CONSEJO DE COMPRA\n" + "=" * 30 + "\n\n"
         for busqueda in BUSQUEDAS:
             nombre = busqueda["nombre"]
             if nombre not in datos or not datos[nombre]:
                 continue
-
             ultimo_precio = datos[nombre][-1]["precio"]
             analisis = analizar_compra(nombre, ultimo_precio, busqueda["precio_maximo"])
-
             if not analisis:
                 continue
-
-            icono = ""
-            if analisis["accion"] == "COMPRA AHORA":
-                icono = "🔥"
-            elif analisis["accion"] == "BUEN MOMENTO":
-                icono = "👍"
-            elif analisis["accion"] == "ESPERA":
-                icono = "⏳"
-            elif analisis["accion"] == "ATENTO":
-                icono = "⚠️"
-
+            iconos = {"COMPRA AHORA": "🔥", "BUEN MOMENTO": "👍", "ESPERA": "⏳", "ATENTO": "⚠️"}
+            icono = iconos.get(analisis["accion"], "")
             msg += f"{icono} {nombre}\n"
             msg += f"  Precio: USD {ultimo_precio}\n"
-            msg += f"  Accion: {analisis['accion']} (confianza: {analisis['confianza']})\n"
+            msg += f"  Accion: {analisis['accion']} ({analisis['confianza']})\n"
             msg += f"  {analisis['razon']}\n"
-            msg += f"  Rango historico: ${analisis['minimo']} - ${analisis['maximo']} (prom: ${analisis['promedio']})\n\n"
-
+            msg += f"  Rango: ${analisis['minimo']} - ${analisis['maximo']} (prom: ${analisis['promedio']})\n\n"
         enviar_telegram_a(chat_id, msg)
 
     elif texto == "/status":
         init_db()
         datos = obtener_todos_los_precios()
         total_registros = sum(len(r) for r in datos.values())
-        msg = "ESTADO DEL SISTEMA\n"
-        msg += "=" * 25 + "\n\n"
-        msg += f"Busquedas configuradas: {len(BUSQUEDAS)}\n"
-        msg += f"Registros en base: {total_registros}\n"
+        msg = "ESTADO DEL SISTEMA\n" + "=" * 25 + "\n\n"
+        msg += f"Base de datos: PostgreSQL (persistente)\n"
+        msg += f"Busquedas: {len(BUSQUEDAS)}\n"
+        msg += f"Registros guardados: {total_registros}\n"
         msg += f"Destinos Telegram: {len([c for c in TELEGRAM_CHAT_IDS if c.strip()])}\n"
         msg += f"Intervalo: cada {INTERVALO_HORAS} horas\n"
         msg += f"Dashboard: https://matiasmoron-pixel.github.io/flight-monitor/\n"
@@ -511,7 +397,6 @@ def loop_bot():
     global LAST_UPDATE_ID
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
     print("Bot de Telegram iniciado - escuchando comandos...")
-
     while True:
         try:
             params = {"offset": LAST_UPDATE_ID + 1, "timeout": 30}
@@ -549,10 +434,7 @@ def ejecutar_monitor():
         ofertas = buscar_vuelos(busqueda)
         print(f"  Encontradas: {len(ofertas)} ofertas")
 
-        baratas = sorted(
-            [o for o in ofertas if float(o["total_amount"]) <= precio_max],
-            key=lambda x: float(x["total_amount"]),
-        )
+        baratas = sorted([o for o in ofertas if float(o["total_amount"]) <= precio_max], key=lambda x: float(x["total_amount"]))
         print(f"  Por debajo de USD {precio_max}: {len(baratas)}")
 
         mejor_precio = None
@@ -576,7 +458,6 @@ def ejecutar_monitor():
         if destino not in destinos_resultados:
             destinos_resultados[destino] = {"alertas": [], "tendencias": [], "compras": []}
 
-        # Analisis de compra
         if mejor_precio:
             analisis = analizar_compra(nombre, mejor_precio, precio_max)
             if analisis and analisis["accion"] == "COMPRA AHORA":
@@ -596,31 +477,24 @@ def ejecutar_monitor():
         if not resultados["alertas"] and not resultados["tendencias"] and not resultados["compras"]:
             continue
 
-        mensaje = f"FLIGHT MONITOR - {ahora}\n"
-        mensaje += f"{destino}\n"
-        mensaje += "=" * 30 + "\n\n"
+        mensaje = f"FLIGHT MONITOR - {ahora}\n{destino}\n" + "=" * 30 + "\n\n"
 
-        # Alertas de COMPRA AHORA primero
         for nombre, precio, aerolinea, analisis in resultados["compras"]:
             mensaje += "🔥🔥🔥 COMPRA AHORA 🔥🔥🔥\n"
-            mensaje += f"{nombre}\n"
-            mensaje += f"USD {precio} ({aerolinea})\n"
-            mensaje += f"{analisis['razon']}\n"
+            mensaje += f"{nombre}\nUSD {precio} ({aerolinea})\n{analisis['razon']}\n"
             mensaje += f"Rango: ${analisis['minimo']} - ${analisis['maximo']} (prom: ${analisis['promedio']})\n\n"
 
         for nombre, baratas, links, tendencia, precio_max in resultados["alertas"]:
             skyscanner, google, kayak = links
             tend_txt = tendencia if tendencia else "SIN DATOS"
-            mensaje += f"{nombre}\n"
-            mensaje += f"Tendencia: {tend_txt}\n"
+            mensaje += f"{nombre}\nTendencia: {tend_txt}\n"
             for oferta in baratas[:3]:
                 mensaje += formatear_oferta_tg(oferta) + "\n"
             mensaje += f"\nSkyscanner: {skyscanner}\nGoogle: {google}\nKayak: {kayak}\n\n"
 
         for nombre, precio, aerolinea, links, precio_max in resultados["tendencias"]:
             skyscanner, google, kayak = links
-            mensaje += f"TENDENCIA: {nombre}\n"
-            mensaje += f"Precio bajando! Actual: USD {precio} ({aerolinea})\n"
+            mensaje += f"TENDENCIA: {nombre}\nPrecio bajando! USD {precio} ({aerolinea})\n"
             mensaje += f"\nSkyscanner: {skyscanner}\nGoogle: {google}\nKayak: {kayak}\n\n"
 
         enviar_telegram(mensaje)
@@ -630,7 +504,6 @@ def ejecutar_monitor():
         print("ALERTA(S) ENVIADA(S) A TELEGRAM")
     else:
         print("No se encontraron ofertas dentro de los rangos.")
-
     print("\n=== Fin ===")
 
 
@@ -654,7 +527,7 @@ CORS(app)
 
 @app.route("/")
 def home():
-    return jsonify({"status": "ok", "servicio": "Flight Monitor API"})
+    return jsonify({"status": "ok", "servicio": "Flight Monitor API", "db": "PostgreSQL"})
 
 
 @app.route("/api/precios")
@@ -708,15 +581,13 @@ if __name__ == "__main__":
     print(f"API disponible en puerto {PORT}")
     print(f"Telegram destinos: {len([c for c in TELEGRAM_CHAT_IDS if c.strip()])} chat(s)")
     print(f"Busquedas configuradas: {len(BUSQUEDAS)}")
+    print(f"Base de datos: PostgreSQL")
     init_db()
 
-    # Thread 1: Monitor automatico cada 6 horas
     monitor_thread = threading.Thread(target=loop_monitor, daemon=True)
     monitor_thread.start()
 
-    # Thread 2: Bot interactivo de Telegram
     bot_thread = threading.Thread(target=loop_bot, daemon=True)
     bot_thread.start()
 
-    # Thread principal: API Flask
     app.run(host="0.0.0.0", port=PORT)
