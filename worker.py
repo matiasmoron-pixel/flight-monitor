@@ -31,19 +31,25 @@ def init_db():
             mejor_precio REAL,
             mejor_aerolinea TEXT,
             total_ofertas INTEGER,
-            ofertas_baratas INTEGER
+            ofertas_baratas INTEGER,
+            detalle_ofertas TEXT
         )
     """)
+    # Agregar columna detalle_ofertas si no existe (migracion)
+    try:
+        c.execute("ALTER TABLE precios ADD COLUMN detalle_ofertas TEXT")
+    except:
+        pass
     conn.commit()
     conn.close()
 
 
-def guardar_precio(busqueda_nombre, mejor_precio, mejor_aerolinea, total, baratas):
+def guardar_precio(busqueda_nombre, mejor_precio, mejor_aerolinea, total, baratas, detalle):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute(
-        "INSERT INTO precios (busqueda, fecha, mejor_precio, mejor_aerolinea, total_ofertas, ofertas_baratas) VALUES (?, ?, ?, ?, ?, ?)",
-        (busqueda_nombre, datetime.now().strftime("%Y-%m-%d %H:%M"), mejor_precio, mejor_aerolinea, total, baratas),
+        "INSERT INTO precios (busqueda, fecha, mejor_precio, mejor_aerolinea, total_ofertas, ofertas_baratas, detalle_ofertas) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (busqueda_nombre, datetime.now().strftime("%Y-%m-%d %H:%M"), mejor_precio, mejor_aerolinea, total, baratas, json.dumps(detalle)),
     )
     conn.commit()
     conn.close()
@@ -52,21 +58,30 @@ def guardar_precio(busqueda_nombre, mejor_precio, mejor_aerolinea, total, barata
 def obtener_todos_los_precios():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT busqueda, fecha, mejor_precio, mejor_aerolinea, total_ofertas, ofertas_baratas FROM precios ORDER BY id")
+    c.execute("SELECT busqueda, fecha, mejor_precio, mejor_aerolinea, total_ofertas, ofertas_baratas, detalle_ofertas FROM precios ORDER BY id")
     rows = c.fetchall()
     conn.close()
 
     resultado = {}
     for row in rows:
-        busqueda, fecha, precio, aerolinea, total, baratas = row
+        busqueda, fecha, precio, aerolinea, total, baratas, detalle_json = row
         if busqueda not in resultado:
             resultado[busqueda] = []
+
+        detalle = []
+        if detalle_json:
+            try:
+                detalle = json.loads(detalle_json)
+            except:
+                pass
+
         resultado[busqueda].append({
             "fecha": fecha,
             "precio": precio,
             "aerolinea": aerolinea,
             "totalOfertas": total,
             "ofertasBaratas": baratas,
+            "ofertas": detalle,
         })
     return resultado
 
@@ -89,7 +104,6 @@ def obtener_stats(busqueda_nombre):
         "maximo": max(precios),
         "promedio": round(sum(precios) / len(precios), 2),
         "registros": len(precios),
-        "ultimos": precios[-5:],
     }
 
 
@@ -154,6 +168,34 @@ def generar_links(busqueda):
     return skyscanner, google, kayak
 
 
+def extraer_detalle_oferta(offer):
+    precio = float(offer["total_amount"])
+    aerolinea = offer["owner"]["name"]
+    tramos = []
+    for s in offer["slices"]:
+        segmentos = s["segments"]
+        n_stops = len(segmentos) - 1
+        origen = segmentos[0]["origin"]["iata_code"]
+        destino_final = segmentos[-1]["destination"]["iata_code"]
+
+        escalas = []
+        for seg in segmentos[:-1]:
+            escalas.append(seg["destination"]["iata_code"])
+
+        tramos.append({
+            "origen": origen,
+            "destino": destino_final,
+            "escalas": escalas,
+            "numEscalas": n_stops,
+        })
+
+    return {
+        "precio": precio,
+        "aerolinea": aerolinea,
+        "tramos": tramos,
+    }
+
+
 def buscar_vuelos(busqueda):
     headers = {
         "Accept-Encoding": "gzip",
@@ -200,10 +242,15 @@ def formatear_oferta(offer):
     airline = offer["owner"]["name"]
     tramos = []
     for s in offer["slices"]:
-        n_stops = len(s["segments"]) - 1
-        origin = s["segments"][0]["origin"]["iata_code"]
-        dest = s["segments"][-1]["destination"]["iata_code"]
-        tramos.append(f"  {origin}->{dest} ({n_stops} escalas)")
+        segmentos = s["segments"]
+        n_stops = len(segmentos) - 1
+        origin = segmentos[0]["origin"]["iata_code"]
+        dest = segmentos[-1]["destination"]["iata_code"]
+        if n_stops == 0:
+            tramos.append(f"  {origin}->{dest} (directo)")
+        else:
+            escalas = [seg["destination"]["iata_code"] for seg in segmentos[:-1]]
+            tramos.append(f"  {origin}->{dest} ({n_stops} esc: {', '.join(escalas)})")
     return f"USD {price} - {airline}\n" + "\n".join(tramos)
 
 
@@ -243,14 +290,19 @@ def ejecutar_monitor():
 
         mejor_precio = None
         mejor_aerolinea = None
+        detalle_baratas = []
+
         if ofertas:
             mejor = min(ofertas, key=lambda x: float(x["total_amount"]))
             mejor_precio = float(mejor["total_amount"])
             mejor_aerolinea = mejor["owner"]["name"]
             print(f"  Mejor precio: USD {mejor_precio} ({mejor_aerolinea})")
 
+        for oferta in baratas[:10]:
+            detalle_baratas.append(extraer_detalle_oferta(oferta))
+
         if mejor_precio:
-            guardar_precio(nombre, mejor_precio, mejor_aerolinea, len(ofertas), len(baratas))
+            guardar_precio(nombre, mejor_precio, mejor_aerolinea, len(ofertas), len(baratas), detalle_baratas)
 
         tendencia = detectar_tendencia(nombre)
         stats = obtener_stats(nombre)
