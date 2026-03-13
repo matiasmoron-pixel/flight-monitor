@@ -155,7 +155,6 @@ def generar_links(busqueda):
 
 
 def parse_duracion(duracion_iso):
-    """Convierte ISO 8601 duration (PT10H30M) a horas y minutos legibles"""
     if not duracion_iso:
         return ""
     horas = 0
@@ -407,11 +406,14 @@ def api_precios():
     init_db()
     datos = obtener_todos_los_precios()
 
+    destino_map = {}
+    for b in BUSQUEDAS:
+        destino_map[b["nombre"]] = b.get("destino", "Sin destino")
+
     resultado = {}
     for nombre, registros in datos.items():
         precios = [r["precio"] for r in registros]
         tendencia = detectar_tendencia(nombre)
-        destino = registros[-1].get("destino", "") if registros else ""
 
         resultado[nombre] = {
             "registros": registros,
@@ -423,7 +425,7 @@ def api_precios():
             },
             "tendencia": tendencia or "SIN DATOS",
             "objetivo": PRECIO_MAXIMO,
-            "destino": destino,
+            "destino": destino_map.get(nombre, "Sin destino"),
         }
 
     return jsonify(resultado)
@@ -431,16 +433,12 @@ def api_precios():
 
 @app.route("/api/destinos")
 def api_destinos():
-    init_db()
-    datos = obtener_todos_los_precios()
-
     destinos = {}
-    for nombre, registros in datos.items():
-        destino = registros[-1].get("destino", "Sin destino") if registros else "Sin destino"
-        if destino not in destinos:
-            destinos[destino] = []
-        destinos[destino].append(nombre)
-
+    for b in BUSQUEDAS:
+        dest = b.get("destino", "Sin destino")
+        if dest not in destinos:
+            destinos[dest] = []
+        destinos[dest].append(b["nombre"])
     return jsonify(destinos)
 
 
