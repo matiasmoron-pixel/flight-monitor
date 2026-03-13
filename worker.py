@@ -277,15 +277,37 @@ def buscar_vuelos(busqueda):
 
 def enviar_telegram(mensaje):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    # Dividir en chunks de max 4000 caracteres
+    chunks = []
+    if len(mensaje) <= 4000:
+        chunks = [mensaje]
+    else:
+        partes = mensaje.split("\n\n")
+        chunk = ""
+        for parte in partes:
+            if len(chunk) + len(parte) + 2 > 4000:
+                if chunk:
+                    chunks.append(chunk)
+                chunk = parte
+            else:
+                chunk = chunk + "\n\n" + parte if chunk else parte
+        if chunk:
+            chunks.append(chunk)
+
     for chat_id in TELEGRAM_CHAT_IDS:
         chat_id = chat_id.strip()
         if not chat_id:
             continue
-        data = {"chat_id": chat_id, "text": mensaje, "parse_mode": "HTML", "disable_web_page_preview": True}
-        try:
-            requests.post(url, data=data)
-        except Exception as e:
-            print(f"  Error enviando a {chat_id}: {e}")
+        for chunk in chunks:
+            data = {"chat_id": chat_id, "text": chunk, "parse_mode": "HTML", "disable_web_page_preview": True}
+            try:
+                resp = requests.post(url, data=data)
+                if resp.status_code != 200:
+                    print(f"  Error Telegram {chat_id}: {resp.status_code} - {resp.text[:200]}")
+                else:
+                    print(f"  Telegram OK -> {chat_id}")
+            except Exception as e:
+                print(f"  Error enviando a {chat_id}: {e}")
 
 
 def formatear_oferta_tg(offer):
@@ -321,8 +343,9 @@ def ejecutar_monitor():
     print(f"=== Flight Monitor - {ahora} ===\n")
 
     init_db()
-    alertas_por_busqueda = []
-    alerta_tendencia = []
+
+    # Agrupar busquedas por destino
+    destinos_resultados = {}
 
     for busqueda in BUSQUEDAS:
         nombre = busqueda["nombre"]
@@ -358,47 +381,46 @@ def ejecutar_monitor():
 
         tendencia = detectar_tendencia(nombre)
 
+        if destino not in destinos_resultados:
+            destinos_resultados[destino] = {"alertas": [], "tendencias": []}
+
         if baratas:
             links = generar_links(busqueda)
-            alertas_por_busqueda.append((nombre, destino, baratas, links, tendencia, precio_max))
+            destinos_resultados[destino]["alertas"].append((nombre, baratas, links, tendencia, precio_max))
         elif tendencia == "BAJANDO" and mejor_precio:
             links = generar_links(busqueda)
-            alerta_tendencia.append((nombre, destino, mejor_precio, mejor_aerolinea, links, precio_max))
+            destinos_resultados[destino]["tendencias"].append((nombre, mejor_precio, mejor_aerolinea, links, precio_max))
 
         print()
 
-    if alertas_por_busqueda or alerta_tendencia:
-        # Agrupar por destino
-        destinos_alerta = {}
-        for nombre, destino, baratas, links, tendencia, precio_max in alertas_por_busqueda:
-            if destino not in destinos_alerta:
-                destinos_alerta[destino] = []
-            destinos_alerta[destino].append((nombre, baratas, links, tendencia, precio_max))
+    # Enviar un mensaje por destino para no pasar el limite de Telegram
+    algo_enviado = False
+    for destino, resultados in destinos_resultados.items():
+        if not resultados["alertas"] and not resultados["tendencias"]:
+            continue
 
-        for nombre, destino, precio, aerolinea, links, precio_max in alerta_tendencia:
-            if destino not in destinos_alerta:
-                destinos_alerta[destino] = []
-            destinos_alerta[destino].append(("TEND_" + nombre, precio, links, None, precio_max, aerolinea))
+        mensaje = f"<b>✈️ FLIGHT MONITOR — {ahora}</b>\n"
+        mensaje += f"<b>🌍 {destino}</b>\n{'─' * 25}\n\n"
 
-        mensaje = f"<b>✈️ FLIGHT MONITOR — {ahora}</b>\n\n"
+        for nombre, baratas, links, tendencia, precio_max in resultados["alertas"]:
+            skyscanner, google, kayak = links
+            mensaje += f"<b>{nombre}</b>\n"
+            mensaje += f"Tendencia: {emoji_tendencia(tendencia)}\n"
+            for oferta in baratas[:3]:
+                mensaje += formatear_oferta_tg(oferta) + "\n"
+            mensaje += f"\n<a href='{skyscanner}'>Skyscanner</a> | <a href='{google}'>Google</a> | <a href='{kayak}'>Kayak</a>\n\n"
 
-        for destino, items in destinos_alerta.items():
-            mensaje += f"<b>🌍 {destino}</b>\n{'─' * 25}\n\n"
-
-            for item in items:
-                if isinstance(item[1], list):
-                    nombre, baratas, links, tendencia, precio_max = item
-                    skyscanner, google, kayak = links
-                    mensaje += f"<b>{nombre}</b>\n"
-                    mensaje += f"Tendencia: {emoji_tendencia(tendencia)}\n"
-                    for oferta in baratas[:3]:
-                        mensaje += formatear_oferta_tg(oferta) + "\n"
-                    mensaje += f"\n<a href='{skyscanner}'>Skyscanner</a> | <a href='{google}'>Google</a> | <a href='{kayak}'>Kayak</a>\n\n"
-
-            mensaje += "\n"
+        for nombre, precio, aerolinea, links, precio_max in resultados["tendencias"]:
+            skyscanner, google, kayak = links
+            mensaje += f"<b>📉 TENDENCIA: {nombre}</b>\n"
+            mensaje += f"Precio bajando! Actual: USD {precio} ({aerolinea})\n"
+            mensaje += f"\n<a href='{skyscanner}'>Skyscanner</a> | <a href='{google}'>Google</a> | <a href='{kayak}'>Kayak</a>\n\n"
 
         enviar_telegram(mensaje)
-        print("ALERTA ENVIADA A TELEGRAM")
+        algo_enviado = True
+
+    if algo_enviado:
+        print("ALERTA(S) ENVIADA(S) A TELEGRAM")
     else:
         print("No se encontraron ofertas dentro de los rangos.")
 
@@ -477,7 +499,7 @@ def api_destinos():
 if __name__ == "__main__":
     print(f"Worker iniciado - ejecuta cada {INTERVALO_HORAS} horas")
     print(f"API disponible en puerto {PORT}")
-    print(f"Telegram destinos: {len(TELEGRAM_CHAT_IDS)} chat(s)")
+    print(f"Telegram destinos: {len([c for c in TELEGRAM_CHAT_IDS if c.strip()])} chat(s)")
     print(f"Busquedas configuradas: {len(BUSQUEDAS)}")
     init_db()
 
