@@ -16,6 +16,7 @@ TELEGRAM_CHAT_IDS = os.getenv("TELEGRAM_CHAT_IDS", "").split(",")
 INTERVALO_HORAS = 6
 DB_PATH = "vuelos.db"
 PORT = int(os.getenv("PORT", 8080))
+LAST_UPDATE_ID = 0
 
 # ─── BASE DE DATOS ───
 
@@ -62,22 +63,16 @@ def obtener_todos_los_precios():
         busqueda, destino, fecha, precio, aerolinea, total, baratas, detalle_json = row
         if busqueda not in resultado:
             resultado[busqueda] = []
-
         detalle = []
         if detalle_json:
             try:
                 detalle = json.loads(detalle_json)
             except:
                 pass
-
         resultado[busqueda].append({
-            "fecha": fecha,
-            "precio": precio,
-            "aerolinea": aerolinea,
-            "totalOfertas": total,
-            "ofertasBaratas": baratas,
-            "ofertas": detalle,
-            "destino": destino or "",
+            "fecha": fecha, "precio": precio, "aerolinea": aerolinea,
+            "totalOfertas": total, "ofertasBaratas": baratas,
+            "ofertas": detalle, "destino": destino or "",
         })
     return resultado
 
@@ -85,32 +80,124 @@ def obtener_todos_los_precios():
 def detectar_tendencia(busqueda_nombre):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute(
-        "SELECT mejor_precio FROM precios WHERE busqueda = ? ORDER BY id DESC LIMIT 4",
-        (busqueda_nombre,),
-    )
+    c.execute("SELECT mejor_precio FROM precios WHERE busqueda = ? ORDER BY id DESC LIMIT 4", (busqueda_nombre,))
     precios = [row[0] for row in c.fetchall()]
     conn.close()
-
     if len(precios) < 4:
         return None
-
     precios.reverse()
     bajadas = sum(1 for i in range(1, len(precios)) if precios[i] < precios[i - 1])
     if bajadas >= 3:
         return "BAJANDO"
-
     subidas = sum(1 for i in range(1, len(precios)) if precios[i] > precios[i - 1])
     if subidas >= 3:
         return "SUBIENDO"
-
     return "ESTABLE"
+
+
+def obtener_historial(busqueda_nombre):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT mejor_precio FROM precios WHERE busqueda = ? ORDER BY id", (busqueda_nombre,))
+    precios = [row[0] for row in c.fetchall()]
+    conn.close()
+    return precios
+
+
+# ─── PREDICCION ───
+
+def analizar_compra(busqueda_nombre, precio_actual, precio_maximo):
+    precios = obtener_historial(busqueda_nombre)
+    if len(precios) < 2:
+        return None
+
+    minimo = min(precios)
+    maximo = max(precios)
+    promedio = sum(precios) / len(precios)
+    rango = maximo - minimo if maximo != minimo else 1
+
+    # Porcentaje de cercania al minimo (0% = es el minimo, 100% = es el maximo)
+    posicion = ((precio_actual - minimo) / rango) * 100 if rango > 0 else 50
+
+    # Tendencia
+    tendencia = detectar_tendencia(busqueda_nombre)
+
+    # Decision
+    if precio_actual <= minimo:
+        return {
+            "accion": "COMPRA AHORA",
+            "razon": f"Precio minimo historico! Nunca estuvo tan bajo.",
+            "confianza": "ALTA",
+            "posicion": posicion,
+            "minimo": minimo,
+            "maximo": maximo,
+            "promedio": round(promedio, 2),
+        }
+    elif posicion <= 10:
+        return {
+            "accion": "COMPRA AHORA",
+            "razon": f"Muy cerca del minimo historico (${minimo}). Solo ${round(precio_actual - minimo, 2)} mas caro.",
+            "confianza": "ALTA",
+            "posicion": posicion,
+            "minimo": minimo,
+            "maximo": maximo,
+            "promedio": round(promedio, 2),
+        }
+    elif posicion <= 30 and tendencia == "BAJANDO":
+        return {
+            "accion": "BUEN MOMENTO",
+            "razon": f"Precio bajo y tendencia a la baja. Podria seguir bajando pero es buen precio.",
+            "confianza": "MEDIA",
+            "posicion": posicion,
+            "minimo": minimo,
+            "maximo": maximo,
+            "promedio": round(promedio, 2),
+        }
+    elif posicion <= 30:
+        return {
+            "accion": "BUEN MOMENTO",
+            "razon": f"Precio en zona baja del rango historico.",
+            "confianza": "MEDIA",
+            "posicion": posicion,
+            "minimo": minimo,
+            "maximo": maximo,
+            "promedio": round(promedio, 2),
+        }
+    elif tendencia == "BAJANDO":
+        return {
+            "accion": "ESPERA",
+            "razon": f"Precio en zona media pero bajando. Conviene esperar.",
+            "confianza": "MEDIA",
+            "posicion": posicion,
+            "minimo": minimo,
+            "maximo": maximo,
+            "promedio": round(promedio, 2),
+        }
+    elif tendencia == "SUBIENDO":
+        return {
+            "accion": "ATENTO",
+            "razon": f"Precio subiendo. Si sigue asi, puede convenir comprar pronto.",
+            "confianza": "BAJA",
+            "posicion": posicion,
+            "minimo": minimo,
+            "maximo": maximo,
+            "promedio": round(promedio, 2),
+        }
+    else:
+        return {
+            "accion": "ESPERA",
+            "razon": f"Precio en zona media. Monitorear.",
+            "confianza": "BAJA",
+            "posicion": posicion,
+            "minimo": minimo,
+            "maximo": maximo,
+            "promedio": round(promedio, 2),
+        }
 
 
 # ─── BUSQUEDAS ───
 
 BUSQUEDAS = [
-    # --- Filipinas + PNG ---
     {
         "nombre": "Filipinas ANTES del tour",
         "destino": "Filipinas + PNG",
@@ -129,7 +216,6 @@ BUSQUEDAS = [
         "vuelta_fecha": "2026-09-03",
         "precio_maximo": 1500,
     },
-    # --- Londres ---
     {
         "nombre": "Londres fechas tempranas",
         "destino": "Londres",
@@ -165,17 +251,13 @@ def generar_links(busqueda):
     vuelta = busqueda["vuelta_fecha"]
     origen = busqueda["origen"]
     destino = busqueda["destino_code"]
-
     ida_yymmdd = ida.replace("-", "")[2:]
     vuelta_yymmdd = vuelta.replace("-", "")[2:]
-
     skyscanner_destinos = {"MNL": "mnl", "LHR": "lhr"}
     skyscanner_dest = skyscanner_destinos.get(destino, destino.lower())
-
     skyscanner = f"https://www.skyscanner.com.ar/transport/flights/buea/{skyscanner_dest}/{ida_yymmdd}/{vuelta_yymmdd}/?adults=1"
     google = f"https://www.google.com/travel/flights?q=Flights+to+{destino}+from+{origen}+on+{ida}+through+{vuelta}&curr=USD"
     kayak = f"https://www.kayak.com/flights/{origen}-{destino}/{ida}/{vuelta}?sort=bestflight_a&fs=stops=0"
-
     return skyscanner, google, kayak
 
 
@@ -184,25 +266,21 @@ def extraer_detalle_oferta(offer):
     aerolinea = offer["owner"]["name"]
     tramos = []
     duracion_total_min = 0
-
     for s in offer["slices"]:
         segmentos = s["segments"]
         n_stops = len(segmentos) - 1
         origen = segmentos[0]["origin"]["iata_code"]
         destino_final = segmentos[-1]["destination"]["iata_code"]
-
         escalas = []
         duracion_tramo_min = 0
         aerolineas_tramo = set()
-
         for seg in segmentos:
             aerolineas_tramo.add(seg.get("operating_carrier", {}).get("name") or seg.get("marketing_carrier", {}).get("name", ""))
             dur = seg.get("duration", "")
             if dur:
                 try:
                     d = dur.replace("PT", "")
-                    h = 0
-                    m = 0
+                    h, m = 0, 0
                     if "H" in d:
                         parts = d.split("H")
                         h = int(parts[0])
@@ -212,65 +290,35 @@ def extraer_detalle_oferta(offer):
                     duracion_tramo_min += h * 60 + m
                 except:
                     pass
-
         for seg in segmentos[:-1]:
             escalas.append(seg["destination"]["iata_code"])
-
         duracion_total_min += duracion_tramo_min
         duracion_texto = f"{duracion_tramo_min // 60}h{duracion_tramo_min % 60:02d}m" if duracion_tramo_min > 0 else ""
-
         tramos.append({
-            "origen": origen,
-            "destino": destino_final,
-            "escalas": escalas,
-            "numEscalas": n_stops,
-            "duracion": duracion_texto,
-            "duracionMin": duracion_tramo_min,
-            "aerolineasTramo": list(aerolineas_tramo),
+            "origen": origen, "destino": destino_final, "escalas": escalas,
+            "numEscalas": n_stops, "duracion": duracion_texto,
+            "duracionMin": duracion_tramo_min, "aerolineasTramo": list(aerolineas_tramo),
         })
-
     duracion_total_texto = f"{duracion_total_min // 60}h{duracion_total_min % 60:02d}m" if duracion_total_min > 0 else ""
-
-    return {
-        "precio": precio,
-        "aerolinea": aerolinea,
-        "tramos": tramos,
-        "duracionTotal": duracion_total_texto,
-        "duracionTotalMin": duracion_total_min,
-    }
+    return {"precio": precio, "aerolinea": aerolinea, "tramos": tramos,
+            "duracionTotal": duracion_total_texto, "duracionTotalMin": duracion_total_min}
 
 
 def buscar_vuelos(busqueda):
     headers = {
-        "Accept-Encoding": "gzip",
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-        "Duffel-Version": "v2",
+        "Accept-Encoding": "gzip", "Accept": "application/json",
+        "Content-Type": "application/json", "Duffel-Version": "v2",
         "Authorization": f"Bearer {DUFFEL_TOKEN}",
     }
-
-    payload = {
-        "data": {
-            "slices": [
-                {"origin": busqueda["origen"], "destination": busqueda["destino_code"], "departure_date": busqueda["ida_fecha"]},
-                {"origin": busqueda["destino_code"], "destination": busqueda["origen"], "departure_date": busqueda["vuelta_fecha"]},
-            ],
-            "passengers": [{"type": "adult"}],
-        }
-    }
-
-    response = requests.post(
-        "https://api.duffel.com/air/offer_requests?return_offers=true",
-        headers=headers,
-        json=payload,
-    )
-
+    payload = {"data": {"slices": [
+        {"origin": busqueda["origen"], "destination": busqueda["destino_code"], "departure_date": busqueda["ida_fecha"]},
+        {"origin": busqueda["destino_code"], "destination": busqueda["origen"], "departure_date": busqueda["vuelta_fecha"]},
+    ], "passengers": [{"type": "adult"}]}}
+    response = requests.post("https://api.duffel.com/air/offer_requests?return_offers=true", headers=headers, json=payload)
     if response.status_code not in [200, 201]:
         print(f"  Error API: {response.status_code}")
         return []
-
-    data = response.json()["data"]
-    return data.get("offers", [])
+    return response.json()["data"].get("offers", [])
 
 
 # ─── TELEGRAM ───
@@ -292,7 +340,6 @@ def enviar_telegram(mensaje):
                 chunk = chunk + "\n\n" + parte if chunk else parte
         if chunk:
             chunks.append(chunk)
-
     for chat_id in TELEGRAM_CHAT_IDS:
         chat_id = chat_id.strip()
         if not chat_id:
@@ -307,6 +354,31 @@ def enviar_telegram(mensaje):
                     print(f"  Telegram OK -> {chat_id}")
             except Exception as e:
                 print(f"  Error enviando a {chat_id}: {e}")
+
+
+def enviar_telegram_a(chat_id, mensaje):
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    chunks = []
+    if len(mensaje) <= 4000:
+        chunks = [mensaje]
+    else:
+        partes = mensaje.split("\n\n")
+        chunk = ""
+        for parte in partes:
+            if len(chunk) + len(parte) + 2 > 4000:
+                if chunk:
+                    chunks.append(chunk)
+                chunk = parte
+            else:
+                chunk = chunk + "\n\n" + parte if chunk else parte
+        if chunk:
+            chunks.append(chunk)
+    for chunk in chunks:
+        data = {"chat_id": chat_id, "text": chunk, "disable_web_page_preview": True}
+        try:
+            requests.post(url, data=data)
+        except:
+            pass
 
 
 def formatear_oferta_tg(offer):
@@ -325,14 +397,138 @@ def formatear_oferta_tg(offer):
     return "\n".join(lineas)
 
 
-def emoji_tendencia(tendencia):
-    if tendencia == "BAJANDO":
-        return "BAJANDO"
-    elif tendencia == "SUBIENDO":
-        return "SUBIENDO"
-    elif tendencia == "ESTABLE":
-        return "ESTABLE"
-    return "SIN DATOS"
+# ─── BOT INTERACTIVO ───
+
+def procesar_comando(chat_id, texto):
+    texto = texto.strip().lower()
+
+    if texto == "/start" or texto == "/help" or texto == "hola":
+        msg = "Flight Monitor Bot\n"
+        msg += "=" * 25 + "\n\n"
+        msg += "Comandos disponibles:\n\n"
+        msg += "/precios - Ver mejores precios actuales\n"
+        msg += "/buscar - Buscar precios AHORA (tarda ~30s)\n"
+        msg += "/consejo - Recomendacion: comprar o esperar?\n"
+        msg += "/status - Estado del sistema\n"
+        enviar_telegram_a(chat_id, msg)
+
+    elif texto == "/precios":
+        init_db()
+        datos = obtener_todos_los_precios()
+        if not datos:
+            enviar_telegram_a(chat_id, "Sin datos todavia. Espera a la proxima busqueda automatica.")
+            return
+
+        msg = "MEJORES PRECIOS ACTUALES\n"
+        msg += "=" * 30 + "\n\n"
+
+        destinos_vistos = {}
+        for nombre, registros in datos.items():
+            if not registros:
+                continue
+            ultimo = registros[-1]
+            busqueda_config = next((b for b in BUSQUEDAS if b["nombre"] == nombre), None)
+            destino = busqueda_config["destino"] if busqueda_config else "?"
+            if destino not in destinos_vistos:
+                destinos_vistos[destino] = []
+            destinos_vistos[destino].append((nombre, ultimo))
+
+        for destino, items in destinos_vistos.items():
+            msg += f"{destino}\n" + "-" * 20 + "\n"
+            mejor = min(items, key=lambda x: x[1]["precio"])
+            for nombre, ultimo in items:
+                precio = ultimo["precio"]
+                aerolinea = ultimo["aerolinea"]
+                fecha = ultimo["fecha"]
+                marcador = " << MEJOR" if (nombre, ultimo) == mejor else ""
+                msg += f"  {nombre}: USD {precio} ({aerolinea}){marcador}\n"
+            msg += f"  Ultima busqueda: {mejor[1]['fecha']}\n\n"
+
+        enviar_telegram_a(chat_id, msg)
+
+    elif texto == "/buscar":
+        enviar_telegram_a(chat_id, "Buscando precios ahora... (puede tardar 30-60 segundos)")
+        try:
+            ejecutar_monitor()
+            enviar_telegram_a(chat_id, "Busqueda completada! Usa /precios para ver resultados.")
+        except Exception as e:
+            enviar_telegram_a(chat_id, f"Error en busqueda: {e}")
+
+    elif texto == "/consejo":
+        init_db()
+        datos = obtener_todos_los_precios()
+        if not datos:
+            enviar_telegram_a(chat_id, "Sin datos suficientes todavia. Necesito al menos 2 busquedas.")
+            return
+
+        msg = "CONSEJO DE COMPRA\n"
+        msg += "=" * 30 + "\n\n"
+
+        for busqueda in BUSQUEDAS:
+            nombre = busqueda["nombre"]
+            if nombre not in datos or not datos[nombre]:
+                continue
+
+            ultimo_precio = datos[nombre][-1]["precio"]
+            analisis = analizar_compra(nombre, ultimo_precio, busqueda["precio_maximo"])
+
+            if not analisis:
+                continue
+
+            icono = ""
+            if analisis["accion"] == "COMPRA AHORA":
+                icono = "🔥"
+            elif analisis["accion"] == "BUEN MOMENTO":
+                icono = "👍"
+            elif analisis["accion"] == "ESPERA":
+                icono = "⏳"
+            elif analisis["accion"] == "ATENTO":
+                icono = "⚠️"
+
+            msg += f"{icono} {nombre}\n"
+            msg += f"  Precio: USD {ultimo_precio}\n"
+            msg += f"  Accion: {analisis['accion']} (confianza: {analisis['confianza']})\n"
+            msg += f"  {analisis['razon']}\n"
+            msg += f"  Rango historico: ${analisis['minimo']} - ${analisis['maximo']} (prom: ${analisis['promedio']})\n\n"
+
+        enviar_telegram_a(chat_id, msg)
+
+    elif texto == "/status":
+        init_db()
+        datos = obtener_todos_los_precios()
+        total_registros = sum(len(r) for r in datos.values())
+        msg = "ESTADO DEL SISTEMA\n"
+        msg += "=" * 25 + "\n\n"
+        msg += f"Busquedas configuradas: {len(BUSQUEDAS)}\n"
+        msg += f"Registros en base: {total_registros}\n"
+        msg += f"Destinos Telegram: {len([c for c in TELEGRAM_CHAT_IDS if c.strip()])}\n"
+        msg += f"Intervalo: cada {INTERVALO_HORAS} horas\n"
+        msg += f"Dashboard: https://matiasmoron-pixel.github.io/flight-monitor/\n"
+        enviar_telegram_a(chat_id, msg)
+
+
+def loop_bot():
+    global LAST_UPDATE_ID
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
+    print("Bot de Telegram iniciado - escuchando comandos...")
+
+    while True:
+        try:
+            params = {"offset": LAST_UPDATE_ID + 1, "timeout": 30}
+            resp = requests.get(url, params=params, timeout=35)
+            if resp.status_code == 200:
+                updates = resp.json().get("result", [])
+                for update in updates:
+                    LAST_UPDATE_ID = update["update_id"]
+                    message = update.get("message", {})
+                    chat_id = str(message.get("chat", {}).get("id", ""))
+                    texto = message.get("text", "")
+                    if chat_id and texto:
+                        print(f"  Bot recibio: '{texto}' de {chat_id}")
+                        procesar_comando(chat_id, texto)
+        except Exception as e:
+            print(f"  Error bot: {e}")
+            time.sleep(5)
 
 
 # ─── MONITOR ───
@@ -340,7 +536,6 @@ def emoji_tendencia(tendencia):
 def ejecutar_monitor():
     ahora = datetime.now().strftime("%Y-%m-%d %H:%M")
     print(f"=== Flight Monitor - {ahora} ===\n")
-
     init_db()
     destinos_resultados = {}
 
@@ -379,7 +574,13 @@ def ejecutar_monitor():
         tendencia = detectar_tendencia(nombre)
 
         if destino not in destinos_resultados:
-            destinos_resultados[destino] = {"alertas": [], "tendencias": []}
+            destinos_resultados[destino] = {"alertas": [], "tendencias": [], "compras": []}
+
+        # Analisis de compra
+        if mejor_precio:
+            analisis = analizar_compra(nombre, mejor_precio, precio_max)
+            if analisis and analisis["accion"] == "COMPRA AHORA":
+                destinos_resultados[destino]["compras"].append((nombre, mejor_precio, mejor_aerolinea, analisis))
 
         if baratas:
             links = generar_links(busqueda)
@@ -392,17 +593,26 @@ def ejecutar_monitor():
 
     algo_enviado = False
     for destino, resultados in destinos_resultados.items():
-        if not resultados["alertas"] and not resultados["tendencias"]:
+        if not resultados["alertas"] and not resultados["tendencias"] and not resultados["compras"]:
             continue
 
         mensaje = f"FLIGHT MONITOR - {ahora}\n"
         mensaje += f"{destino}\n"
         mensaje += "=" * 30 + "\n\n"
 
+        # Alertas de COMPRA AHORA primero
+        for nombre, precio, aerolinea, analisis in resultados["compras"]:
+            mensaje += "🔥🔥🔥 COMPRA AHORA 🔥🔥🔥\n"
+            mensaje += f"{nombre}\n"
+            mensaje += f"USD {precio} ({aerolinea})\n"
+            mensaje += f"{analisis['razon']}\n"
+            mensaje += f"Rango: ${analisis['minimo']} - ${analisis['maximo']} (prom: ${analisis['promedio']})\n\n"
+
         for nombre, baratas, links, tendencia, precio_max in resultados["alertas"]:
             skyscanner, google, kayak = links
+            tend_txt = tendencia if tendencia else "SIN DATOS"
             mensaje += f"{nombre}\n"
-            mensaje += f"Tendencia: {emoji_tendencia(tendencia)}\n"
+            mensaje += f"Tendencia: {tend_txt}\n"
             for oferta in baratas[:3]:
                 mensaje += formatear_oferta_tg(oferta) + "\n"
             mensaje += f"\nSkyscanner: {skyscanner}\nGoogle: {google}\nKayak: {kayak}\n\n"
@@ -432,7 +642,6 @@ def loop_monitor():
         except Exception as e:
             print(f"Error en ejecucion: {e}")
             traceback.print_exc()
-
         print(f"Proxima ejecucion en {INTERVALO_HORAS} horas...")
         time.sleep(INTERVALO_HORAS * 3600)
 
@@ -452,7 +661,6 @@ def home():
 def api_precios():
     init_db()
     datos = obtener_todos_los_precios()
-
     destino_map = {}
     precio_map = {}
     for b in BUSQUEDAS:
@@ -463,6 +671,8 @@ def api_precios():
     for nombre, registros in datos.items():
         precios = [r["precio"] for r in registros]
         tendencia = detectar_tendencia(nombre)
+        ultimo_precio = precios[-1] if precios else 0
+        analisis = analizar_compra(nombre, ultimo_precio, precio_map.get(nombre, 1500)) if len(precios) >= 2 else None
 
         resultado[nombre] = {
             "registros": registros,
@@ -475,8 +685,8 @@ def api_precios():
             "tendencia": tendencia or "SIN DATOS",
             "objetivo": precio_map.get(nombre, 1500),
             "destino": destino_map.get(nombre, "Sin destino"),
+            "consejo": analisis,
         }
-
     return jsonify(resultado)
 
 
@@ -500,7 +710,13 @@ if __name__ == "__main__":
     print(f"Busquedas configuradas: {len(BUSQUEDAS)}")
     init_db()
 
+    # Thread 1: Monitor automatico cada 6 horas
     monitor_thread = threading.Thread(target=loop_monitor, daemon=True)
     monitor_thread.start()
 
+    # Thread 2: Bot interactivo de Telegram
+    bot_thread = threading.Thread(target=loop_bot, daemon=True)
+    bot_thread.start()
+
+    # Thread principal: API Flask
     app.run(host="0.0.0.0", port=PORT)
