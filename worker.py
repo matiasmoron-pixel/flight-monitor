@@ -2,8 +2,12 @@ import os
 import time
 import sqlite3
 import traceback
+import threading
+import json
 import requests
 from datetime import datetime
+from flask import Flask, jsonify
+from flask_cors import CORS
 
 DUFFEL_TOKEN = os.getenv("DUFFEL_TOKEN")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -12,7 +16,9 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 PRECIO_MAXIMO = 1500
 INTERVALO_HORAS = 6
 DB_PATH = "vuelos.db"
+PORT = int(os.getenv("PORT", 8080))
 
+# ─── BASE DE DATOS ───
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -41,6 +47,28 @@ def guardar_precio(busqueda_nombre, mejor_precio, mejor_aerolinea, total, barata
     )
     conn.commit()
     conn.close()
+
+
+def obtener_todos_los_precios():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT busqueda, fecha, mejor_precio, mejor_aerolinea, total_ofertas, ofertas_baratas FROM precios ORDER BY id")
+    rows = c.fetchall()
+    conn.close()
+
+    resultado = {}
+    for row in rows:
+        busqueda, fecha, precio, aerolinea, total, baratas = row
+        if busqueda not in resultado:
+            resultado[busqueda] = []
+        resultado[busqueda].append({
+            "fecha": fecha,
+            "precio": precio,
+            "aerolinea": aerolinea,
+            "totalOfertas": total,
+            "ofertasBaratas": baratas,
+        })
+    return resultado
 
 
 def obtener_stats(busqueda_nombre):
@@ -79,24 +107,18 @@ def detectar_tendencia(busqueda_nombre):
         return None
 
     precios.reverse()
-    bajadas = 0
-    for i in range(1, len(precios)):
-        if precios[i] < precios[i - 1]:
-            bajadas += 1
-
+    bajadas = sum(1 for i in range(1, len(precios)) if precios[i] < precios[i - 1])
     if bajadas >= 3:
         return "BAJANDO"
-    
-    subidas = 0
-    for i in range(1, len(precios)):
-        if precios[i] > precios[i - 1]:
-            subidas += 1
 
+    subidas = sum(1 for i in range(1, len(precios)) if precios[i] > precios[i - 1])
     if subidas >= 3:
         return "SUBIENDO"
 
     return "ESTABLE"
 
+
+# ─── BUSQUEDAS ───
 
 BUSQUEDAS = [
     {
@@ -125,20 +147,9 @@ def generar_links(busqueda):
     ida_yymmdd = ida.replace("-", "")[2:]
     vuelta_yymmdd = vuelta.replace("-", "")[2:]
 
-    skyscanner = (
-        f"https://www.skyscanner.com.ar/transport/flights/buea/mnl/"
-        f"{ida_yymmdd}/{vuelta_yymmdd}/?adults=1"
-    )
-
-    google = (
-        f"https://www.google.com/travel/flights?q=Flights+to+{destino}+from+"
-        f"{origen}+on+{ida}+through+{vuelta}&curr=USD"
-    )
-
-    kayak = (
-        f"https://www.kayak.com/flights/{origen}-{destino}/{ida}/{vuelta}"
-        f"?sort=bestflight_a&fs=stops=0"
-    )
+    skyscanner = f"https://www.skyscanner.com.ar/transport/flights/buea/mnl/{ida_yymmdd}/{vuelta_yymmdd}/?adults=1"
+    google = f"https://www.google.com/travel/flights?q=Flights+to+{destino}+from+{origen}+on+{ida}+through+{vuelta}&curr=USD"
+    kayak = f"https://www.kayak.com/flights/{origen}-{destino}/{ida}/{vuelta}?sort=bestflight_a&fs=stops=0"
 
     return skyscanner, google, kayak
 
@@ -155,16 +166,8 @@ def buscar_vuelos(busqueda):
     payload = {
         "data": {
             "slices": [
-                {
-                    "origin": busqueda["origen"],
-                    "destination": busqueda["destino"],
-                    "departure_date": busqueda["ida_fecha"],
-                },
-                {
-                    "origin": busqueda["destino"],
-                    "destination": busqueda["origen"],
-                    "departure_date": busqueda["vuelta_fecha"],
-                },
+                {"origin": busqueda["origen"], "destination": busqueda["destino"], "departure_date": busqueda["ida_fecha"]},
+                {"origin": busqueda["destino"], "destination": busqueda["origen"], "departure_date": busqueda["vuelta_fecha"]},
             ],
             "passengers": [{"type": "adult"}],
         }
@@ -184,14 +187,11 @@ def buscar_vuelos(busqueda):
     return data.get("offers", [])
 
 
+# ─── TELEGRAM ───
+
 def enviar_telegram(mensaje):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    data = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": mensaje,
-        "parse_mode": "HTML",
-        "disable_web_page_preview": True,
-    }
+    data = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "HTML", "disable_web_page_preview": True}
     requests.post(url, data=data)
 
 
@@ -204,8 +204,7 @@ def formatear_oferta(offer):
         origin = s["segments"][0]["origin"]["iata_code"]
         dest = s["segments"][-1]["destination"]["iata_code"]
         tramos.append(f"  {origin}->{dest} ({n_stops} escalas)")
-    tramos_texto = "\n".join(tramos)
-    return f"USD {price} - {airline}\n{tramos_texto}"
+    return f"USD {price} - {airline}\n" + "\n".join(tramos)
 
 
 def emoji_tendencia(tendencia):
@@ -217,6 +216,8 @@ def emoji_tendencia(tendencia):
         return "➡️ ESTABLE"
     return "🆕 SIN DATOS"
 
+
+# ─── MONITOR ───
 
 def ejecutar_monitor():
     ahora = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -269,9 +270,7 @@ def ejecutar_monitor():
         print()
 
     if alertas_por_busqueda or alerta_tendencia:
-        total = sum(len(baratas) for _, baratas, _, _, _ in alertas_por_busqueda)
-        mensaje = f"<b>✈️ ALERTA DE VUELOS</b>\n"
-        mensaje += f"{ahora}\n\n"
+        mensaje = f"<b>✈️ ALERTA DE VUELOS</b>\n{ahora}\n\n"
 
         for nombre, baratas, links, tendencia, stats in alertas_por_busqueda:
             skyscanner, google, kayak = links
@@ -280,35 +279,26 @@ def ejecutar_monitor():
             for oferta in baratas:
                 mensaje += formatear_oferta(oferta) + "\n"
             if stats:
-                mensaje += f"\n📊 Min: USD {stats['minimo']} | Max: USD {stats['maximo']} | Prom: USD {stats['promedio']} ({stats['registros']} registros)\n"
-            mensaje += f"\n<a href='{skyscanner}'>Skyscanner</a>"
-            mensaje += f" | <a href='{google}'>Google Flights</a>"
-            mensaje += f" | <a href='{kayak}'>Kayak</a>\n\n"
+                mensaje += f"\n📊 Min: USD {stats['minimo']} | Max: USD {stats['maximo']} | Prom: USD {stats['promedio']} ({stats['registros']} reg)\n"
+            mensaje += f"\n<a href='{skyscanner}'>Skyscanner</a> | <a href='{google}'>Google Flights</a> | <a href='{kayak}'>Kayak</a>\n\n"
 
         for nombre, precio, aerolinea, links, stats in alerta_tendencia:
             skyscanner, google, kayak = links
             mensaje += f"<b>📉 TENDENCIA: {nombre}</b>\n"
-            mensaje += f"Precio bajando 3 veces seguidas!\n"
-            mensaje += f"Actual: USD {precio} ({aerolinea})\n"
+            mensaje += f"Precio bajando 3 veces seguidas!\nActual: USD {precio} ({aerolinea})\n"
             if stats:
                 mensaje += f"📊 Min: USD {stats['minimo']} | Max: USD {stats['maximo']} | Prom: USD {stats['promedio']}\n"
-            mensaje += f"\n<a href='{skyscanner}'>Skyscanner</a>"
-            mensaje += f" | <a href='{google}'>Google Flights</a>"
-            mensaje += f" | <a href='{kayak}'>Kayak</a>\n\n"
+            mensaje += f"\n<a href='{skyscanner}'>Skyscanner</a> | <a href='{google}'>Google Flights</a> | <a href='{kayak}'>Kayak</a>\n\n"
 
         enviar_telegram(mensaje)
         print("ALERTA ENVIADA A TELEGRAM")
     else:
         print(f"No se encontraron vuelos por debajo de USD {PRECIO_MAXIMO}.")
-        print("No se envia alerta.")
 
     print("\n=== Fin ===")
 
 
-if __name__ == "__main__":
-    print(f"Worker iniciado - ejecuta cada {INTERVALO_HORAS} horas")
-    print(f"Hora de inicio: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-
+def loop_monitor():
     while True:
         try:
             print(f"\n--- Ejecutando monitor: {datetime.now().strftime('%Y-%m-%d %H:%M')} ---")
@@ -317,6 +307,54 @@ if __name__ == "__main__":
             print(f"Error en ejecucion: {e}")
             traceback.print_exc()
 
-        proxima = INTERVALO_HORAS * 3600
         print(f"Proxima ejecucion en {INTERVALO_HORAS} horas...")
-        time.sleep(proxima)
+        time.sleep(INTERVALO_HORAS * 3600)
+
+
+# ─── API PARA DASHBOARD ───
+
+app = Flask(__name__)
+CORS(app)
+
+
+@app.route("/")
+def home():
+    return jsonify({"status": "ok", "servicio": "Flight Monitor API"})
+
+
+@app.route("/api/precios")
+def api_precios():
+    init_db()
+    datos = obtener_todos_los_precios()
+
+    resultado = {}
+    for nombre, registros in datos.items():
+        precios = [r["precio"] for r in registros]
+        tendencia = detectar_tendencia(nombre)
+
+        resultado[nombre] = {
+            "registros": registros,
+            "stats": {
+                "minimo": min(precios) if precios else 0,
+                "maximo": max(precios) if precios else 0,
+                "promedio": round(sum(precios) / len(precios), 2) if precios else 0,
+                "total": len(precios),
+            },
+            "tendencia": tendencia or "SIN DATOS",
+            "objetivo": PRECIO_MAXIMO,
+        }
+
+    return jsonify(resultado)
+
+
+# ─── INICIO ───
+
+if __name__ == "__main__":
+    print(f"Worker iniciado - ejecuta cada {INTERVALO_HORAS} horas")
+    print(f"API disponible en puerto {PORT}")
+    init_db()
+
+    monitor_thread = threading.Thread(target=loop_monitor, daemon=True)
+    monitor_thread.start()
+
+    app.run(host="0.0.0.0", port=PORT)
