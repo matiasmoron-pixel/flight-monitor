@@ -277,7 +277,6 @@ def buscar_vuelos(busqueda):
 
 def enviar_telegram(mensaje):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    # Dividir en chunks de max 4000 caracteres
     chunks = []
     if len(mensaje) <= 4000:
         chunks = [mensaje]
@@ -299,7 +298,7 @@ def enviar_telegram(mensaje):
         if not chat_id:
             continue
         for chunk in chunks:
-            data = {"chat_id": chat_id, "text": chunk, "parse_mode": "HTML", "disable_web_page_preview": True}
+            data = {"chat_id": chat_id, "text": chunk, "disable_web_page_preview": True}
             try:
                 resp = requests.post(url, data=data)
                 if resp.status_code != 200:
@@ -328,12 +327,12 @@ def formatear_oferta_tg(offer):
 
 def emoji_tendencia(tendencia):
     if tendencia == "BAJANDO":
-        return "📉 BAJANDO"
+        return "BAJANDO"
     elif tendencia == "SUBIENDO":
-        return "📈 SUBIENDO"
+        return "SUBIENDO"
     elif tendencia == "ESTABLE":
-        return "➡️ ESTABLE"
-    return "🆕 SIN DATOS"
+        return "ESTABLE"
+    return "SIN DATOS"
 
 
 # ─── MONITOR ───
@@ -343,8 +342,6 @@ def ejecutar_monitor():
     print(f"=== Flight Monitor - {ahora} ===\n")
 
     init_db()
-
-    # Agrupar busquedas por destino
     destinos_resultados = {}
 
     for busqueda in BUSQUEDAS:
@@ -393,28 +390,28 @@ def ejecutar_monitor():
 
         print()
 
-    # Enviar un mensaje por destino para no pasar el limite de Telegram
     algo_enviado = False
     for destino, resultados in destinos_resultados.items():
         if not resultados["alertas"] and not resultados["tendencias"]:
             continue
 
-        mensaje = f"<b>✈️ FLIGHT MONITOR — {ahora}</b>\n"
-        mensaje += f"<b>🌍 {destino}</b>\n{'─' * 25}\n\n"
+        mensaje = f"FLIGHT MONITOR - {ahora}\n"
+        mensaje += f"{destino}\n"
+        mensaje += "=" * 30 + "\n\n"
 
         for nombre, baratas, links, tendencia, precio_max in resultados["alertas"]:
             skyscanner, google, kayak = links
-            mensaje += f"<b>{nombre}</b>\n"
+            mensaje += f"{nombre}\n"
             mensaje += f"Tendencia: {emoji_tendencia(tendencia)}\n"
             for oferta in baratas[:3]:
                 mensaje += formatear_oferta_tg(oferta) + "\n"
-            mensaje += f"\n<a href='{skyscanner}'>Skyscanner</a> | <a href='{google}'>Google</a> | <a href='{kayak}'>Kayak</a>\n\n"
+            mensaje += f"\nSkyscanner: {skyscanner}\nGoogle: {google}\nKayak: {kayak}\n\n"
 
         for nombre, precio, aerolinea, links, precio_max in resultados["tendencias"]:
             skyscanner, google, kayak = links
-            mensaje += f"<b>📉 TENDENCIA: {nombre}</b>\n"
+            mensaje += f"TENDENCIA: {nombre}\n"
             mensaje += f"Precio bajando! Actual: USD {precio} ({aerolinea})\n"
-            mensaje += f"\n<a href='{skyscanner}'>Skyscanner</a> | <a href='{google}'>Google</a> | <a href='{kayak}'>Kayak</a>\n\n"
+            mensaje += f"\nSkyscanner: {skyscanner}\nGoogle: {google}\nKayak: {kayak}\n\n"
 
         enviar_telegram(mensaje)
         algo_enviado = True
