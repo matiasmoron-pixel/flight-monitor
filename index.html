@@ -38,11 +38,7 @@
     margin-bottom: 4px;
   }
 
-  .header h1 {
-    font-size: 22px;
-    font-weight: 300;
-    color: #f1f5f9;
-  }
+  .header h1 { font-size: 22px; font-weight: 300; color: #f1f5f9; }
 
   .btn {
     border: none;
@@ -51,18 +47,14 @@
     font-size: 12px;
     cursor: pointer;
     transition: all 0.2s;
+    font-family: inherit;
   }
 
   .btn-primary { background: #0ea5e9; color: #fff; font-weight: 600; }
   .btn-secondary { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
   .btn-ghost { background: transparent; color: #475569; border: 1px solid #1e293b; }
 
-  .tabs {
-    display: flex;
-    gap: 6px;
-    margin-top: 18px;
-    flex-wrap: wrap;
-  }
+  .tabs { display: flex; gap: 6px; margin-top: 18px; flex-wrap: wrap; }
 
   .tab {
     background: transparent;
@@ -76,26 +68,13 @@
     transition: all 0.2s;
   }
 
-  .tab.active {
-    background: #1e293b;
-    border-color: #334155;
-    color: #f1f5f9;
-  }
+  .tab.active { background: #1e293b; border-color: #334155; color: #f1f5f9; }
 
-  .tab-price {
-    margin-left: 8px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-  }
+  .tab-price { margin-left: 8px; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
 
   .content { padding: 24px 28px; }
 
-  .stats-grid {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    margin-bottom: 20px;
-  }
+  .stats-grid { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
 
   .stat-card {
     background: #0c1222;
@@ -106,35 +85,11 @@
     min-width: 110px;
   }
 
-  .stat-label {
-    font-size: 10px;
-    color: #475569;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    margin-bottom: 8px;
-  }
+  .stat-label { font-size: 10px; color: #475569; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px; }
+  .stat-value { font-size: 20px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+  .stat-sub { font-size: 11px; color: #64748b; margin-top: 4px; }
 
-  .stat-value {
-    font-size: 20px;
-    font-weight: 700;
-    font-family: 'JetBrains Mono', monospace;
-  }
-
-  .stat-sub {
-    font-size: 11px;
-    color: #64748b;
-    margin-top: 4px;
-  }
-
-  .badge {
-    padding: 3px 10px;
-    border-radius: 20px;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    display: inline-block;
-  }
-
+  .badge { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; letter-spacing: 0.5px; display: inline-block; }
   .badge-down { background: #064e3b; color: #34d399; border: 1px solid #065f46; }
   .badge-up { background: #7f1d1d; color: #fca5a5; border: 1px solid #991b1b; }
   .badge-stable { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
@@ -152,7 +107,7 @@
   .objetivo-dentro { background: #064e3b; border: 1px solid #065f46; }
   .objetivo-fuera { background: #1e293b; border: 1px solid #334155; }
 
-  .chart-box {
+  .card {
     background: #0c1222;
     border: 1px solid #1e293b;
     border-radius: 12px;
@@ -160,59 +115,93 @@
     margin-bottom: 20px;
   }
 
-  .section-label {
-    font-size: 10px;
-    color: #475569;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    margin-bottom: 14px;
-  }
+  .section-label { font-size: 10px; color: #475569; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 14px; }
 
   .history-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 0;
+    padding: 14px 0;
     border-bottom: 1px solid #111827;
   }
 
-  .history-date {
-    font-size: 12px;
-    color: #94a3b8;
-    font-family: 'JetBrains Mono', monospace;
+  .history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
   }
 
-  .history-airline {
-    font-size: 12px;
-    color: #475569;
-    margin-left: 12px;
-  }
-
-  .history-meta {
-    font-size: 10px;
-    color: #334155;
-    margin-left: 8px;
-  }
-
-  .history-diff {
-    font-size: 10px;
-    margin-right: 10px;
-  }
-
-  .history-price {
-    font-size: 14px;
-    font-weight: 600;
-    font-family: 'JetBrains Mono', monospace;
-  }
+  .history-date { font-size: 12px; color: #94a3b8; font-family: 'JetBrains Mono', monospace; }
+  .history-airline { font-size: 12px; color: #475569; margin-left: 12px; }
+  .history-meta { font-size: 10px; color: #334155; margin-left: 8px; }
+  .history-diff { font-size: 10px; margin-right: 10px; }
+  .history-price { font-size: 14px; font-weight: 600; font-family: 'JetBrains Mono', monospace; }
 
   .price-green { color: #34d399; }
   .price-red { color: #ef4444; }
   .price-white { color: #e2e8f0; }
   .price-muted { color: #475569; }
 
-  .history-scroll {
-    max-height: 300px;
-    overflow-y: auto;
+  .history-scroll { max-height: 600px; overflow-y: auto; }
+
+  .ofertas-detalle {
+    margin-top: 10px;
+    padding: 12px;
+    background: #0a0f1e;
+    border-radius: 8px;
+    border: 1px solid #1e293b;
+  }
+
+  .oferta-item {
+    padding: 8px 0;
+    border-bottom: 1px solid #111827;
+  }
+
+  .oferta-item:last-child { border-bottom: none; }
+
+  .oferta-precio {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .oferta-aerolinea {
+    font-size: 12px;
+    color: #94a3b8;
+    margin-left: 8px;
+  }
+
+  .oferta-tramo {
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 4px;
+    padding-left: 12px;
+  }
+
+  .escala-tag {
+    display: inline-block;
+    background: #1e293b;
+    color: #f59e0b;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    margin-left: 4px;
+  }
+
+  .directo-tag {
+    display: inline-block;
+    background: #064e3b;
+    color: #34d399;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  .toggle-icon {
+    color: #475569;
+    font-size: 10px;
+    margin-left: 8px;
+    transition: transform 0.2s;
   }
 
   .error-bar {
@@ -234,24 +223,9 @@
   }
 
   .connect-box { max-width: 420px; padding: 40px; }
-
-  .connect-box h1 {
-    color: #f1f5f9;
-    font-size: 22px;
-    font-weight: 300;
-    margin-bottom: 8px;
-  }
-
-  .connect-box p {
-    color: #64748b;
-    font-size: 13px;
-    margin-bottom: 28px;
-  }
-
-  .connect-form {
-    display: flex;
-    gap: 8px;
-  }
+  .connect-box h1 { color: #f1f5f9; font-size: 22px; font-weight: 300; margin-bottom: 8px; }
+  .connect-box p { color: #64748b; font-size: 13px; margin-bottom: 28px; }
+  .connect-form { display: flex; gap: 8px; }
 
   .connect-input {
     flex: 1;
@@ -265,19 +239,11 @@
     font-family: inherit;
   }
 
-  .connect-input:focus {
-    border-color: #0ea5e9;
-  }
+  .connect-input:focus { border-color: #0ea5e9; }
 
-  .empty-state {
-    text-align: center;
-    padding: 60px 20px;
-    color: #334155;
-  }
-
+  .empty-state { text-align: center; padding: 60px 20px; color: #334155; }
   .empty-state .icon { font-size: 40px; margin-bottom: 16px; }
   .empty-state .title { font-size: 16px; color: #64748b; margin-bottom: 8px; }
-  .empty-state .desc { font-size: 13px; }
 </style>
 </head>
 <body>
@@ -292,6 +258,7 @@ let selectedBusqueda = null;
 let chart = null;
 let error = null;
 let lastFetch = null;
+let expandedRows = {};
 
 function render() {
   const app = document.getElementById("app");
@@ -319,8 +286,34 @@ function renderConnect() {
           <button class="btn btn-primary" id="connectBtn">Conectar</button>
         </div>
       </div>
-    </div>
-  `;
+    </div>`;
+}
+
+function renderOfertasDetalle(ofertas) {
+  if (!ofertas || ofertas.length === 0) return '<div style="color:#334155;font-size:11px;padding:8px">Sin detalle de ofertas para este registro</div>';
+
+  return ofertas.map(o => {
+    const tramosHtml = o.tramos.map(t => {
+      let escInfo = '';
+      if (t.numEscalas === 0) {
+        escInfo = '<span class="directo-tag">DIRECTO</span>';
+      } else {
+        escInfo = t.escalas.map(e => `<span class="escala-tag">${e}</span>`).join(' ');
+        escInfo = `${t.numEscalas} esc: ${escInfo}`;
+      }
+      return `<div class="oferta-tramo">${t.origen} → ${t.destino} ${escInfo}</div>`;
+    }).join('');
+
+    const priceClass = o.precio <= OBJETIVO ? 'price-green' : 'price-white';
+
+    return `<div class="oferta-item">
+      <div>
+        <span class="oferta-precio ${priceClass}">USD ${o.precio}</span>
+        <span class="oferta-aerolinea">${o.aerolinea}</span>
+      </div>
+      ${tramosHtml}
+    </div>`;
+  }).join('');
 }
 
 function renderDashboard() {
@@ -344,43 +337,55 @@ function renderDashboard() {
   }).join("");
 
   let errorHtml = error ? `<div class="error-bar">${error}</div>` : '';
-
   let contentHtml = '';
 
   if (!data || busquedas.length === 0) {
-    contentHtml = `
-      <div class="empty-state">
-        <div class="icon">⏳</div>
-        <div class="title">Esperando datos</div>
-        <div class="desc">El monitor corre cada 6 horas. Los datos van a aparecer despues de la primera ejecucion.</div>
-      </div>`;
+    contentHtml = `<div class="empty-state"><div class="icon">⏳</div><div class="title">Esperando datos</div><div style="font-size:13px;color:#334155">El monitor corre cada 6 horas.</div></div>`;
   } else if (current && stats) {
     const badgeClass = tendencia === 'BAJANDO' ? 'badge-down' : tendencia === 'SUBIENDO' ? 'badge-up' : tendencia === 'ESTABLE' ? 'badge-stable' : 'badge-none';
     const badgeIcon = tendencia === 'BAJANDO' ? '↘' : tendencia === 'SUBIENDO' ? '↗' : tendencia === 'ESTABLE' ? '→' : '·';
-
     const diffText = diff !== null ? `${diff > 0 ? '+' : ''}${diff} vs anterior` : '';
     const precioColor = dentroObj ? 'price-green' : 'price-white';
 
+    // Ultima busqueda - ofertas detalladas
+    let ultimasOfertasHtml = '';
+    if (ultimo && ultimo.ofertas && ultimo.ofertas.length > 0) {
+      ultimasOfertasHtml = `
+        <div class="card">
+          <div class="section-label">Ofertas de la ultima busqueda (${ultimo.fecha})</div>
+          ${renderOfertasDetalle(ultimo.ofertas)}
+        </div>`;
+    }
+
+    // History
     let historyHtml = '';
     if (registros.length === 0) {
       historyHtml = '<div style="color:#334155;text-align:center;padding:30px;font-size:13px">Sin registros aun.</div>';
     } else {
       const reversed = [...registros].reverse();
       historyHtml = '<div class="history-scroll">' + reversed.map((d, i) => {
-        const prev = registros.length > 1 && i < registros.length - 1 ? registros[registros.length - 2 - i]?.precio : null;
+        const realIndex = registros.length - 1 - i;
+        const prev = realIndex > 0 ? registros[realIndex - 1]?.precio : null;
         const dd = prev ? Math.round((d.precio - prev) * 100) / 100 : null;
         const diffClass = dd !== null ? (dd < 0 ? 'price-green' : dd > 0 ? 'price-red' : 'price-muted') : '';
         const priceClass = d.precio <= OBJETIVO ? 'price-green' : 'price-white';
+        const isExpanded = expandedRows[`${selectedBusqueda}-${realIndex}`];
+        const hasOfertas = d.ofertas && d.ofertas.length > 0;
+
         return `<div class="history-row">
-          <div>
-            <span class="history-date">${d.fecha}</span>
-            <span class="history-airline">${d.aerolinea}</span>
-            <span class="history-meta">${d.totalOfertas} ofertas / ${d.ofertasBaratas} baratas</span>
+          <div class="history-header" ${hasOfertas ? `data-toggle="${selectedBusqueda}-${realIndex}"` : ''}>
+            <div>
+              <span class="history-date">${d.fecha}</span>
+              <span class="history-airline">${d.aerolinea}</span>
+              <span class="history-meta">${d.totalOfertas} ofertas / ${d.ofertasBaratas} baratas</span>
+              ${hasOfertas ? `<span class="toggle-icon">${isExpanded ? '▲' : '▼'}</span>` : ''}
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              ${dd !== null ? `<span class="history-diff ${diffClass}">${dd > 0 ? '+' : ''}${dd}</span>` : ''}
+              <span class="history-price ${priceClass}">$${d.precio}</span>
+            </div>
           </div>
-          <div style="display:flex;align-items:center;gap:10px">
-            ${dd !== null ? `<span class="history-diff ${diffClass}">${dd > 0 ? '+' : ''}${dd}</span>` : ''}
-            <span class="history-price ${priceClass}">$${d.precio}</span>
-          </div>
+          ${isExpanded && hasOfertas ? `<div class="ofertas-detalle">${renderOfertasDetalle(d.ofertas)}</div>` : ''}
         </div>`;
       }).join('') + '</div>';
     }
@@ -418,18 +423,18 @@ function renderDashboard() {
         <span style="font-size:12px;color:#64748b;font-family:monospace">Objetivo: USD ${OBJETIVO}</span>
       </div>
 
+      ${ultimasOfertasHtml}
+
       ${registros.length > 1 ? `
-        <div class="chart-box">
+        <div class="card">
           <div class="section-label">Evolucion de precio</div>
           <canvas id="priceChart" height="220"></canvas>
-        </div>
-      ` : ''}
+        </div>` : ''}
 
-      <div class="chart-box">
-        <div class="section-label">Historial de precios</div>
+      <div class="card">
+        <div class="section-label">Historial de busquedas — click para ver detalle</div>
         ${historyHtml}
-      </div>
-    `;
+      </div>`;
   }
 
   return `
@@ -448,8 +453,7 @@ function renderDashboard() {
       ${errorHtml}
       ${tabsHtml ? `<div class="tabs">${tabsHtml}</div>` : ''}
     </div>
-    <div class="content">${contentHtml}</div>
-  `;
+    <div class="content">${contentHtml}</div>`;
 }
 
 function renderChart() {
@@ -460,16 +464,13 @@ function renderChart() {
 
   if (chart) chart.destroy();
 
-  const labels = registros.map(r => r.fecha.slice(5, 16));
-  const precios = registros.map(r => r.precio);
-
   chart = new Chart(ctx, {
     type: "line",
     data: {
-      labels,
+      labels: registros.map(r => r.fecha.slice(5, 16)),
       datasets: [{
         label: "Precio USD",
-        data: precios,
+        data: registros.map(r => r.precio),
         borderColor: "#0ea5e9",
         backgroundColor: "rgba(14, 165, 233, 0.1)",
         fill: true,
@@ -491,8 +492,7 @@ function renderChart() {
               return `USD ${r.precio} (${r.aerolinea})`;
             }
           }
-        },
-        annotation: undefined
+        }
       },
       scales: {
         x: { ticks: { color: "#475569", font: { size: 10 } }, grid: { color: "#1e293b" } },
@@ -572,9 +572,16 @@ function setupDashboardEvents() {
       render();
     });
   });
+
+  document.querySelectorAll("[data-toggle]").forEach(el => {
+    el.addEventListener("click", () => {
+      const key = el.dataset.toggle;
+      expandedRows[key] = !expandedRows[key];
+      render();
+    });
+  });
 }
 
-// Init
 render();
 if (apiUrl) {
   fetchData();
