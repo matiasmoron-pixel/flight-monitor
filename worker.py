@@ -1,5 +1,6 @@
 import os
 import time
+import sqlite3
 import traceback
 import requests
 from datetime import datetime
@@ -10,6 +11,92 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 PRECIO_MAXIMO = 1500
 INTERVALO_HORAS = 6
+DB_PATH = "vuelos.db"
+
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS precios (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            busqueda TEXT,
+            fecha TEXT,
+            mejor_precio REAL,
+            mejor_aerolinea TEXT,
+            total_ofertas INTEGER,
+            ofertas_baratas INTEGER
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+def guardar_precio(busqueda_nombre, mejor_precio, mejor_aerolinea, total, baratas):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO precios (busqueda, fecha, mejor_precio, mejor_aerolinea, total_ofertas, ofertas_baratas) VALUES (?, ?, ?, ?, ?, ?)",
+        (busqueda_nombre, datetime.now().strftime("%Y-%m-%d %H:%M"), mejor_precio, mejor_aerolinea, total, baratas),
+    )
+    conn.commit()
+    conn.close()
+
+
+def obtener_stats(busqueda_nombre):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "SELECT mejor_precio FROM precios WHERE busqueda = ? ORDER BY id",
+        (busqueda_nombre,),
+    )
+    precios = [row[0] for row in c.fetchall()]
+    conn.close()
+
+    if not precios:
+        return None
+
+    return {
+        "minimo": min(precios),
+        "maximo": max(precios),
+        "promedio": round(sum(precios) / len(precios), 2),
+        "registros": len(precios),
+        "ultimos": precios[-5:],
+    }
+
+
+def detectar_tendencia(busqueda_nombre):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "SELECT mejor_precio FROM precios WHERE busqueda = ? ORDER BY id DESC LIMIT 4",
+        (busqueda_nombre,),
+    )
+    precios = [row[0] for row in c.fetchall()]
+    conn.close()
+
+    if len(precios) < 4:
+        return None
+
+    precios.reverse()
+    bajadas = 0
+    for i in range(1, len(precios)):
+        if precios[i] < precios[i - 1]:
+            bajadas += 1
+
+    if bajadas >= 3:
+        return "BAJANDO"
+    
+    subidas = 0
+    for i in range(1, len(precios)):
+        if precios[i] > precios[i - 1]:
+            subidas += 1
+
+    if subidas >= 3:
+        return "SUBIENDO"
+
+    return "ESTABLE"
+
 
 BUSQUEDAS = [
     {
@@ -121,11 +208,23 @@ def formatear_oferta(offer):
     return f"USD {price} - {airline}\n{tramos_texto}"
 
 
+def emoji_tendencia(tendencia):
+    if tendencia == "BAJANDO":
+        return "📉 BAJANDO"
+    elif tendencia == "SUBIENDO":
+        return "📈 SUBIENDO"
+    elif tendencia == "ESTABLE":
+        return "➡️ ESTABLE"
+    return "🆕 SIN DATOS"
+
+
 def ejecutar_monitor():
     ahora = datetime.now().strftime("%Y-%m-%d %H:%M")
     print(f"=== Flight Monitor - {ahora} ===\n")
 
+    init_db()
     alertas_por_busqueda = []
+    alerta_tendencia = []
 
     for busqueda in BUSQUEDAS:
         nombre = busqueda["nombre"]
@@ -137,36 +236,65 @@ def ejecutar_monitor():
 
         baratas = sorted(
             [o for o in ofertas if float(o["total_amount"]) <= PRECIO_MAXIMO],
-            key=lambda x: float(x["total_amount"])
+            key=lambda x: float(x["total_amount"]),
         )
         print(f"  Por debajo de USD {PRECIO_MAXIMO}: {len(baratas)}")
 
-        if baratas:
-            links = generar_links(busqueda)
-            alertas_por_busqueda.append((nombre, baratas, links))
-
+        mejor_precio = None
+        mejor_aerolinea = None
         if ofertas:
             mejor = min(ofertas, key=lambda x: float(x["total_amount"]))
-            print(f"  Mejor precio: USD {mejor['total_amount']} ({mejor['owner']['name']})")
+            mejor_precio = float(mejor["total_amount"])
+            mejor_aerolinea = mejor["owner"]["name"]
+            print(f"  Mejor precio: USD {mejor_precio} ({mejor_aerolinea})")
+
+        if mejor_precio:
+            guardar_precio(nombre, mejor_precio, mejor_aerolinea, len(ofertas), len(baratas))
+
+        tendencia = detectar_tendencia(nombre)
+        stats = obtener_stats(nombre)
+
+        if tendencia:
+            print(f"  Tendencia: {tendencia}")
+        if stats:
+            print(f"  Stats: min={stats['minimo']}, max={stats['maximo']}, avg={stats['promedio']}, registros={stats['registros']}")
+
+        if baratas:
+            links = generar_links(busqueda)
+            alertas_por_busqueda.append((nombre, baratas, links, tendencia, stats))
+        elif tendencia == "BAJANDO" and mejor_precio:
+            links = generar_links(busqueda)
+            alerta_tendencia.append((nombre, mejor_precio, mejor_aerolinea, links, stats))
 
         print()
 
-    if alertas_por_busqueda:
-        total = sum(len(baratas) for _, baratas, _ in alertas_por_busqueda)
-        mensaje = f"<b>ALERTA DE VUELOS</b>\n"
-        mensaje += f"Encontre {total} oferta(s) por debajo de USD {PRECIO_MAXIMO}:\n\n"
+    if alertas_por_busqueda or alerta_tendencia:
+        total = sum(len(baratas) for _, baratas, _, _, _ in alertas_por_busqueda)
+        mensaje = f"<b>✈️ ALERTA DE VUELOS</b>\n"
+        mensaje += f"{ahora}\n\n"
 
-        for nombre, baratas, links in alertas_por_busqueda:
+        for nombre, baratas, links, tendencia, stats in alertas_por_busqueda:
             skyscanner, google, kayak = links
             mensaje += f"<b>{nombre}</b>\n"
+            mensaje += f"Tendencia: {emoji_tendencia(tendencia)}\n"
             for oferta in baratas:
                 mensaje += formatear_oferta(oferta) + "\n"
-            mensaje += f"\nBuscar y reservar:\n"
-            mensaje += f"<a href='{skyscanner}'>Skyscanner</a>"
+            if stats:
+                mensaje += f"\n📊 Min: USD {stats['minimo']} | Max: USD {stats['maximo']} | Prom: USD {stats['promedio']} ({stats['registros']} registros)\n"
+            mensaje += f"\n<a href='{skyscanner}'>Skyscanner</a>"
             mensaje += f" | <a href='{google}'>Google Flights</a>"
             mensaje += f" | <a href='{kayak}'>Kayak</a>\n\n"
 
-        mensaje += f"Buscado: {ahora}"
+        for nombre, precio, aerolinea, links, stats in alerta_tendencia:
+            skyscanner, google, kayak = links
+            mensaje += f"<b>📉 TENDENCIA: {nombre}</b>\n"
+            mensaje += f"Precio bajando 3 veces seguidas!\n"
+            mensaje += f"Actual: USD {precio} ({aerolinea})\n"
+            if stats:
+                mensaje += f"📊 Min: USD {stats['minimo']} | Max: USD {stats['maximo']} | Prom: USD {stats['promedio']}\n"
+            mensaje += f"\n<a href='{skyscanner}'>Skyscanner</a>"
+            mensaje += f" | <a href='{google}'>Google Flights</a>"
+            mensaje += f" | <a href='{kayak}'>Kayak</a>\n\n"
 
         enviar_telegram(mensaje)
         print("ALERTA ENVIADA A TELEGRAM")
